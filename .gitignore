@@ -13,5 +13,10 @@ dist/
 
 .vercel/
 
+public/*
+!public/.gitkeep
+
 backend/uploads/*
 !backend/uploads/.gitkeep
+.vercel
+.env*.local

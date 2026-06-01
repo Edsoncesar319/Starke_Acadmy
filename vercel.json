@@ -1,4 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/((?!_/backend/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "experimentalServices": {
     "frontend": {
       "entrypoint": "frontend",

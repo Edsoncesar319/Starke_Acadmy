@@ -1,0 +1,8 @@
+{
+  "name": "starke-academy",
+  "private": true,
+  "scripts": {
+    "build:frontend": "cd frontend && npm ci && npm run build",
+    "build:public": "python backend/scripts/vercel_build.py"
+  }
+}
