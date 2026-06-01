@@ -1,0 +1,25 @@
+<div class="min-h-screen bg-obsidian-gradient">
+  @if (showShell) {
+    <app-side-nav />
+    <main class="ml-64 p-6">
+      <app-top-app-bar
+        [title]="'Student Experience'"
+        [studentName]="student().name"
+        [studentLevel]="student().studentLevel"
+      />
+      <div class="mb-4 flex justify-end">
+        <button
+          (click)="logout()"
+          class="rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10"
+        >
+          Logout
+        </button>
+      </div>
+      <router-outlet />
+</main>
+  } @else {
+    <main class="p-6">
+<router-outlet />
+    </main>
+  }
+</div>

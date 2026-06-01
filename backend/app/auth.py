@@ -61,3 +61,12 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="Admin access required",
         )
     return current_user
+
+
+def get_current_content_manager(current_user: User = Depends(get_current_user)) -> User:
+    if not (current_user.is_admin or current_user.is_instructor):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Instructor or admin access required",
+        )
+    return current_user

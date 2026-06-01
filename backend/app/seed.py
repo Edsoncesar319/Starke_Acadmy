@@ -18,6 +18,19 @@ def seed_data(db: Session) -> None:
         db.add(admin)
         db.commit()
 
+    instructor = db.query(User).filter(User.email == "instructor@starke.academy").first()
+    if not instructor:
+        instructor = User(
+            name="Instrutor Starke",
+            email="instructor@starke.academy",
+            password_hash=get_password_hash("instructor123"),
+            student_level="Instructor",
+            is_admin=False,
+            is_instructor=True,
+        )
+        db.add(instructor)
+        db.commit()
+
     if db.query(User).filter(User.email == "evelyn@starke.academy").first():
         return
 

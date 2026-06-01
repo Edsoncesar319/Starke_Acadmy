@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  /*
+    Fluid Typography:
+    - Minimum: 15px on small screens
+    - Preferred: scales with viewport width
+    - Maximum: 18px on large screens
+  */
+  font-size: clamp(15px, 0.28vw + 14px, 18px);
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.5;
+  @apply bg-obsidian-900 text-slate-100;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(1.9rem, 2.4vw + 1.1rem, 3.2rem);
+}
+
+h2 {
+  font-size: clamp(1.45rem, 1.4vw + 1rem, 2.2rem);
+}
+
+h3 {
+  font-size: clamp(1.15rem, 0.9vw + 0.9rem, 1.6rem);
+}
+
+.gold-border {
+  @apply border border-gold-500/40;
+}
+
+@layer components {
+  .chat-panel {
+    @apply overflow-hidden rounded-2xl border border-gold-500/25 bg-obsidian-800/80 shadow-gold;
+  }
+
+  .chat-header {
+    @apply flex items-center justify-between border-b border-gold-500/20 bg-obsidian-700/80 px-4 py-3;
+  }
+
+  .chat-body {
+    @apply max-h-[28rem] space-y-3 overflow-y-auto bg-[linear-gradient(180deg,#151515_0%,#101010_100%)] px-4 py-4;
+  }
+
+  .chat-row {
+    @apply flex gap-2;
+  }
+
+  .chat-row-in {
+    @apply justify-start;
+  }
+
+  .chat-row-out {
+    @apply justify-end;
+  }
+
+  .chat-avatar {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gold-500/40 bg-gold-500/15 text-xs font-semibold text-gold-300;
+  }
+
+  .chat-bubble {
+    @apply max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-md;
+  }
+
+  .chat-bubble-in {
+    @apply rounded-tl-md border border-gold-500/20 bg-obsidian-700/90 text-slate-100;
+  }
+
+  .chat-bubble-out {
+    @apply rounded-tr-md border border-gold-500/35 bg-gold-500/20 text-gold-300;
+  }
+
+  .chat-meta {
+    @apply mt-1 text-[0.7rem] text-slate-500;
+  }
+
+  .chat-composer {
+    @apply border-t border-gold-500/20 bg-obsidian-700/70 p-3;
+  }
+
+  .chat-input {
+    @apply w-full resize-none rounded-xl border border-gold-500/25 bg-obsidian-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-gold-500/50;
+  }
+
+  .chat-send-btn {
+    @apply rounded-xl border border-gold-500/40 bg-gold-500/15 px-4 py-2 text-sm font-semibold text-gold-300 transition hover:bg-gold-500/25 disabled:opacity-50;
+  }
+}

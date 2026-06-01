@@ -9,7 +9,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .auth import create_access_token, get_current_admin, get_current_user, verify_password
+from .auth import (
+    create_access_token,
+    get_current_admin,
+    get_current_content_manager,
+    get_current_user,
+    verify_password,
+)
 from .database import Base, SessionLocal, engine, get_db
 from .models import Course, Enrollment, Lesson, StudentMessage, Ticket, User
 from .schemas import (
@@ -18,6 +24,9 @@ from .schemas import (
     CourseUpdate,
     EnrollmentCreate,
     EnrollmentOut,
+    LessonCreate,
+    LessonOut,
+    LessonUpdate,
     ProgressUpdate,
     StudentMessageCreate,
     StudentMessageOut,
@@ -37,6 +46,17 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+VIDEO_UPLOAD_DIR = UPLOAD_DIR / "videos"
+VIDEO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
+ALLOWED_VIDEO_MIME_TYPES = {
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "application/octet-stream",
+    "binary/octet-stream",
+}
+MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +83,8 @@ def ensure_schema_updates() -> None:
         columns = {row["name"] for row in result}
         if "is_admin" not in columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        if "is_instructor" not in columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_instructor BOOLEAN DEFAULT 0"))
 
 
 @app.on_event("startup")
@@ -140,6 +162,65 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+async def _save_uploaded_image(file: UploadFile) -> str:
+    extension = Path(file.filename or "").suffix.lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Invalid image format")
+    if file.content_type not in ALLOWED_IMAGE_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid image content type")
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+
+    filename = f"{uuid4().hex}{extension}"
+    destination = UPLOAD_DIR / filename
+    destination.write_bytes(content)
+    return f"http://127.0.0.1:8000/uploads/{filename}"
+
+
+async def _save_uploaded_video(file: UploadFile) -> str:
+    extension = Path(file.filename or "").suffix.lower()
+    if extension not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Invalid video format. Use MP4, WEBM or MOV.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if (
+        content_type
+        and content_type not in ALLOWED_VIDEO_MIME_TYPES
+        and not content_type.startswith("video/")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de arquivo não suportado ({content_type}). Use MP4, WEBM ou MOV.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_VIDEO_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Video too large (max 100MB)")
+
+    filename = f"{uuid4().hex}{extension}"
+    destination = VIDEO_UPLOAD_DIR / filename
+    destination.write_bytes(content)
+    return f"http://127.0.0.1:8000/uploads/videos/{filename}"
+
+
+@app.post("/me/upload-avatar")
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admins must use admin routes")
+
+    image_url = await _save_uploaded_image(file)
+    current_user.avatar_url = image_url
+    db.commit()
+    db.refresh(current_user)
+    return {"image_url": image_url, "user": current_user}
 
 
 @app.get("/courses", response_model=list[CourseOut])
@@ -246,7 +327,17 @@ def list_student_messages(current_user: User = Depends(get_current_user), db: Se
 
 @app.get("/admin/users", response_model=list[UserOut])
 def admin_list_users(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
-    return db.query(User).order_by(User.name.asc()).all()
+    return db.query(User).order_by(User.id.desc()).all()
+
+
+@app.get("/admin/students", response_model=list[UserOut])
+def admin_list_students(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return (
+        db.query(User)
+        .filter(User.is_admin.is_(False), User.is_instructor.is_(False))
+        .order_by(User.id.desc())
+        .all()
+    )
 
 
 @app.patch("/admin/students/{student_id}", response_model=UserOut)
@@ -268,9 +359,28 @@ def admin_update_student(
     student.email = payload.email
     student.student_level = payload.student_level.strip()
     student.avatar_url = payload.avatar_url or None
+    student.is_instructor = payload.is_instructor
     db.commit()
     db.refresh(student)
     return student
+
+
+@app.post("/admin/students/{student_id}/upload-avatar")
+async def admin_upload_student_avatar(
+    student_id: int,
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    student = db.query(User).filter(User.id == student_id, User.is_admin.is_(False)).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    image_url = await _save_uploaded_image(file)
+    student.avatar_url = image_url
+    db.commit()
+    db.refresh(student)
+    return {"image_url": image_url, "user": student}
 
 
 @app.post("/admin/courses", response_model=CourseOut, status_code=status.HTTP_201_CREATED)
@@ -362,17 +472,82 @@ async def admin_upload_course_image(
     file: UploadFile = File(...),
     _: User = Depends(get_current_admin),
 ):
-    extension = Path(file.filename or "").suffix.lower()
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Invalid image format")
-    if file.content_type not in ALLOWED_IMAGE_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid image content type")
+    image_url = await _save_uploaded_image(file)
+    return {"image_url": image_url}
 
-    content = await file.read()
-    if len(content) > MAX_IMAGE_SIZE_BYTES:
-        raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
 
-    filename = f"{uuid4().hex}{extension}"
-    destination = UPLOAD_DIR / filename
-    destination.write_bytes(content)
-    return {"image_url": f"http://127.0.0.1:8000/uploads/{filename}"}
+@app.get("/admin/courses/{course_id}/lessons", response_model=list[LessonOut])
+def admin_list_lessons(
+    course_id: int,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return db.query(Lesson).filter(Lesson.course_id == course_id).order_by(Lesson.id.asc()).all()
+
+
+@app.post("/admin/lessons", response_model=LessonOut, status_code=status.HTTP_201_CREATED)
+def admin_create_lesson(
+    payload: LessonCreate,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    course = db.query(Course).filter(Course.id == payload.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    lesson = Lesson(
+        course_id=payload.course_id,
+        module_name=payload.module_name.strip(),
+        title=payload.title.strip(),
+        video_url=payload.video_url.strip(),
+        content_md=payload.content_md.strip(),
+    )
+    db.add(lesson)
+    db.commit()
+    db.refresh(lesson)
+    return lesson
+
+
+@app.put("/admin/lessons/{lesson_id}", response_model=LessonOut)
+def admin_update_lesson(
+    lesson_id: int,
+    payload: LessonUpdate,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    lesson.module_name = payload.module_name.strip()
+    lesson.title = payload.title.strip()
+    lesson.video_url = payload.video_url.strip()
+    lesson.content_md = payload.content_md.strip()
+    db.commit()
+    db.refresh(lesson)
+    return lesson
+
+
+@app.delete("/admin/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_lesson(
+    lesson_id: int,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    db.delete(lesson)
+    db.commit()
+
+
+@app.post("/admin/lessons/upload-video")
+async def admin_upload_lesson_video(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_content_manager),
+):
+    video_url = await _save_uploaded_video(file)
+    return {"video_url": video_url}

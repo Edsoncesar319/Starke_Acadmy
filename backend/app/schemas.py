@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     student_level: str
     avatar_url: str | None = None
     is_admin: bool
+    is_instructor: bool = False
 
 
 class UserProfileUpdate(BaseModel):
@@ -37,6 +38,7 @@ class AdminStudentUpdate(BaseModel):
     email: EmailStr
     student_level: str
     avatar_url: str | None = None
+    is_instructor: bool = False
 
 
 class CourseOut(BaseModel):
@@ -74,6 +76,21 @@ class LessonOut(BaseModel):
 
     id: int
     course_id: int
+    module_name: str
+    title: str
+    video_url: str
+    content_md: str
+
+
+class LessonCreate(BaseModel):
+    course_id: int
+    module_name: str
+    title: str
+    video_url: str = ""
+    content_md: str = ""
+
+
+class LessonUpdate(BaseModel):
     module_name: str
     title: str
     video_url: str

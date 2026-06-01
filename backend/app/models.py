@@ -16,6 +16,7 @@ class User(Base):
     student_level: Mapped[str] = mapped_column(String(80), default="Gold Scholar")
     avatar_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_admin: Mapped[bool] = mapped_column(default=False)
+    is_instructor: Mapped[bool] = mapped_column(default=False)
 
     enrollments = relationship("Enrollment", back_populates="user", cascade="all,delete-orphan")
     tickets = relationship("Ticket", back_populates="user", cascade="all,delete-orphan")
