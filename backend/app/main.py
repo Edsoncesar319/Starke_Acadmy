@@ -1,12 +1,10 @@
 from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .auth import (
@@ -16,7 +14,16 @@ from .auth import (
     get_current_user,
     verify_password,
 )
-from .database import Base, SessionLocal, engine, get_db
+from .database import Base, SessionLocal, engine, ensure_schema_updates, get_db
+from .storage import (
+    UPLOAD_DIR,
+    VIDEO_UPLOAD_DIR,
+    blob_storage_enabled,
+    max_video_bytes,
+    on_vercel,
+    upload_avatar_or_course_image,
+    upload_lesson_video,
+)
 from .models import Course, Enrollment, Lesson, StudentMessage, Ticket, User
 from .schemas import (
     CourseCreate,
@@ -41,13 +48,9 @@ from .schemas import (
 from .seed import seed_data
 
 app = FastAPI(title="Starke Academy Elite API", version="1.0.0")
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
-VIDEO_UPLOAD_DIR = UPLOAD_DIR / "videos"
-VIDEO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
 ALLOWED_VIDEO_MIME_TYPES = {
     "video/mp4",
@@ -56,8 +59,6 @@ ALLOWED_VIDEO_MIME_TYPES = {
     "application/octet-stream",
     "binary/octet-stream",
 }
-MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,7 +66,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+if not blob_storage_enabled():
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    VIDEO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.middleware("http")
@@ -75,16 +80,6 @@ async def ensure_utf8_json(request, call_next):
     if content_type.startswith("application/json") and "charset" not in content_type:
         response.headers["content-type"] = "application/json; charset=utf-8"
     return response
-
-
-def ensure_schema_updates() -> None:
-    with engine.begin() as connection:
-        result = connection.execute(text("PRAGMA table_info(users)")).mappings().all()
-        columns = {row["name"] for row in result}
-        if "is_admin" not in columns:
-            connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
-        if "is_instructor" not in columns:
-            connection.execute(text("ALTER TABLE users ADD COLUMN is_instructor BOOLEAN DEFAULT 0"))
 
 
 @app.on_event("startup")
@@ -164,7 +159,7 @@ def update_me(
     return current_user
 
 
-async def _save_uploaded_image(file: UploadFile) -> str:
+async def _save_uploaded_image(file: UploadFile, *, blob_folder: str) -> str:
     extension = Path(file.filename or "").suffix.lower()
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Invalid image format")
@@ -172,13 +167,16 @@ async def _save_uploaded_image(file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="Invalid image content type")
 
     content = await file.read()
-    if len(content) > MAX_IMAGE_SIZE_BYTES:
-        raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+    max_bytes = min(MAX_IMAGE_SIZE_BYTES, 4 * 1024 * 1024) if on_vercel() else MAX_IMAGE_SIZE_BYTES
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=400, detail=f"Image too large (max {max_bytes // (1024 * 1024)}MB)")
 
-    filename = f"{uuid4().hex}{extension}"
-    destination = UPLOAD_DIR / filename
-    destination.write_bytes(content)
-    return f"http://127.0.0.1:8000/uploads/{filename}"
+    return await upload_avatar_or_course_image(
+        content,
+        extension,
+        file.content_type or "application/octet-stream",
+        blob_folder=blob_folder,
+    )
 
 
 async def _save_uploaded_video(file: UploadFile) -> str:
@@ -198,13 +196,20 @@ async def _save_uploaded_video(file: UploadFile) -> str:
         )
 
     content = await file.read()
-    if len(content) > MAX_VIDEO_SIZE_BYTES:
+    limit = max_video_bytes()
+    if len(content) > limit:
+        if on_vercel():
+            raise HTTPException(
+                status_code=400,
+                detail="Video too large for server upload on Vercel (max 4MB). Use a smaller file or client-side upload.",
+            )
         raise HTTPException(status_code=400, detail="Video too large (max 100MB)")
 
-    filename = f"{uuid4().hex}{extension}"
-    destination = VIDEO_UPLOAD_DIR / filename
-    destination.write_bytes(content)
-    return f"http://127.0.0.1:8000/uploads/videos/{filename}"
+    return await upload_lesson_video(
+        content,
+        extension,
+        file.content_type or "application/octet-stream",
+    )
 
 
 @app.post("/me/upload-avatar")
@@ -216,7 +221,7 @@ async def upload_my_avatar(
     if current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admins must use admin routes")
 
-    image_url = await _save_uploaded_image(file)
+    image_url = await _save_uploaded_image(file, blob_folder="avatars")
     current_user.avatar_url = image_url
     db.commit()
     db.refresh(current_user)
@@ -376,7 +381,7 @@ async def admin_upload_student_avatar(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    image_url = await _save_uploaded_image(file)
+    image_url = await _save_uploaded_image(file, blob_folder="avatars")
     student.avatar_url = image_url
     db.commit()
     db.refresh(student)
@@ -472,7 +477,7 @@ async def admin_upload_course_image(
     file: UploadFile = File(...),
     _: User = Depends(get_current_admin),
 ):
-    image_url = await _save_uploaded_image(file)
+    image_url = await _save_uploaded_image(file, blob_folder="course-images")
     return {"image_url": image_url}
 
 

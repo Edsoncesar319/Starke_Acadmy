@@ -1,9 +1,43 @@
-from sqlalchemy import create_engine
+import os
+
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
 
-DATABASE_URL = "sqlite:///./starke_elite.db"
+_default_sqlite = (
+    "sqlite:////tmp/starke_elite.db"
+    if os.getenv("VERCEL")
+    else "sqlite:///./starke_elite.db"
+)
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+def resolve_database_url() -> str:
+    url = (
+        os.getenv("POSTGRES_URL")
+        or os.getenv("POSTGRES_URL_NON_POOLING")
+        or os.getenv("DATABASE_URL")
+        or _default_sqlite
+    )
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    if url.startswith("postgresql://") and "+psycopg" not in url.split("://", 1)[0]:
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
+DATABASE_URL = resolve_database_url()
+
+
+def create_db_engine(url: str):
+    kwargs: dict = {"pool_pre_ping": True}
+    if url.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        kwargs["poolclass"] = NullPool
+    return create_engine(url, **kwargs)
+
+
+engine = create_db_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -14,3 +48,29 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_schema_updates() -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("users")}
+    dialect = engine.dialect.name
+    is_sqlite = dialect == "sqlite"
+    default_false = "0" if is_sqlite else "FALSE"
+
+    migrations: list[tuple[str, str]] = []
+    if "is_admin" not in columns:
+        migrations.append(("is_admin", default_false))
+    if "is_instructor" not in columns:
+        migrations.append(("is_instructor", default_false))
+
+    if not migrations:
+        return
+
+    with engine.begin() as connection:
+        for column_name, default in migrations:
+            connection.execute(
+                text(f"ALTER TABLE users ADD COLUMN {column_name} BOOLEAN DEFAULT {default}")
+            )

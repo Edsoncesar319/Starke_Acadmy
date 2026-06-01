@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User
 
-SECRET_KEY = "starke-elite-super-secret-key"
+SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "starke-elite-super-secret-key-dev-only")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8
 

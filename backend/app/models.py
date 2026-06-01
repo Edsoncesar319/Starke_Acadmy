@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -14,9 +14,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(180), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     student_level: Mapped[str] = mapped_column(String(80), default="Gold Scholar")
-    avatar_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    is_admin: Mapped[bool] = mapped_column(default=False)
-    is_instructor: Mapped[bool] = mapped_column(default=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_instructor: Mapped[bool] = mapped_column(Boolean, default=False)
 
     enrollments = relationship("Enrollment", back_populates="user", cascade="all,delete-orphan")
     tickets = relationship("Ticket", back_populates="user", cascade="all,delete-orphan")
@@ -42,7 +42,7 @@ class Course(Base):
     price: Mapped[float] = mapped_column(Float, nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False)
     rating: Mapped[float] = mapped_column(Float, nullable=False, default=4.8)
-    hero_image_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hero_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     lessons = relationship("Lesson", back_populates="course", cascade="all,delete-orphan")
     enrollments = relationship("Enrollment", back_populates="course", cascade="all,delete-orphan")
@@ -55,7 +55,7 @@ class Lesson(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
     module_name: Mapped[str] = mapped_column(String(120), nullable=False)
     title: Mapped[str] = mapped_column(String(180), nullable=False)
-    video_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    video_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
 
     course = relationship("Course", back_populates="lessons")
