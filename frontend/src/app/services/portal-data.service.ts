@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
-import { environment } from '../../environments/environment';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
 
 export interface Course {
   id: number;
@@ -29,7 +29,7 @@ export interface StudentProfile {
   avatarUrl: string | null;
 }
 
-interface Lesson {
+export interface Lesson {
   id: number;
   courseId: number;
   moduleName: string;
@@ -50,7 +50,7 @@ export interface StudentMessage {
 @Injectable({ providedIn: 'root' })
 export class PortalDataService {
   private readonly http = inject(HttpClient);
-  private readonly apiUrl = environment.apiUrl;
+  private readonly apiUrl = 'http://127.0.0.1:8000';
 
   readonly student = signal<StudentProfile>({
     id: 0,
@@ -167,6 +167,41 @@ export class PortalDataService {
       await this.refreshPortalData();
     } catch {
       this.error.set('Progress update failed.');
+    }
+  }
+
+  async uploadAvatar(file: File): Promise<string> {
+    this.error.set(null);
+    this.status.set(null);
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      this.error.set('Formato inválido. Use PNG, JPG ou WEBP.');
+      throw new Error('Formato inválido.');
+    }
+
+    const preparedFile = await prepareImageForUpload(file);
+    if (preparedFile.size > MAX_UPLOAD_BYTES) {
+      this.error.set('Imagem muito grande. Use um arquivo menor.');
+      throw new Error('Imagem muito grande.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', preparedFile);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ image_url: string; user: { avatar_url: string | null } }>(
+          `${this.apiUrl}/me/upload-avatar`,
+          formData,
+        ),
+      );
+      this.student.update((current) => ({
+        ...current,
+        avatarUrl: response.user.avatar_url ?? response.image_url,
+      }));
+      this.status.set('Foto de perfil atualizada.');
+      return response.image_url;
+    } catch {
+      this.error.set('Falha no upload da foto. Verifique formato e tamanho.');
+      throw new Error('Falha no upload.');
     }
   }
 

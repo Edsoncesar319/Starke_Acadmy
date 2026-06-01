@@ -1,20 +1,29 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
-import { AdminCourse, AdminService } from '../services/admin.service';
+import { AdminCourse, AdminLesson, AdminService } from '../services/admin.service';
+import { StarkeLogoComponent } from '../shared/starke-logo.component';
 
 @Component({
   selector: 'app-super-admin-dashboard',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, StarkeLogoComponent],
   template: `
     <section class="space-y-6 p-6">
       <header class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
+        <div class="flex flex-wrap items-center gap-6">
+          <app-starke-logo size="md" [showTitle]="false" />
+          <div class="min-w-0 flex-1">
         <h1 class="text-2xl font-semibold text-gold-300">Super Admin Dashboard</h1>
         <p class="mt-1 text-sm text-slate-300">Edição dos cursos oferecidos e envio de detalhes para alunos.</p>
+        <p class="mt-2 text-xs text-slate-500">
+          {{ admin.students().length }} aluno(s) matriculado(s) · atualização automática a cada 8s
+        </p>
         <button (click)="logout()" class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10">
           Logout
         </button>
+          </div>
+        </div>
       </header>
 
       @if (admin.status()) {
@@ -23,6 +32,215 @@ import { AdminCourse, AdminService } from '../services/admin.service';
       @if (admin.error()) {
         <p class="rounded-lg border border-red-400/30 bg-red-900/20 px-4 py-2 text-sm text-red-300">{{ admin.error() }}</p>
       }
+
+      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-medium text-gold-300">Todos os alunos no banco</h2>
+            <p class="text-xs text-slate-500">Lista completa de usuários matriculados (não administradores).</p>
+          </div>
+          <span class="rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-300">
+            Total: {{ admin.students().length }}
+          </span>
+        </div>
+
+        @if (admin.students().length === 0) {
+          <p class="rounded-lg border border-gold-500/15 bg-obsidian-800/60 px-4 py-6 text-center text-sm text-slate-400">
+            Nenhum aluno matriculado no banco de dados.
+          </p>
+        } @else {
+          <div class="max-h-80 overflow-auto rounded-lg border border-gold-500/15">
+            <table class="w-full min-w-[640px] text-left text-sm">
+              <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
+                <tr>
+                  <th class="px-4 py-3">ID</th>
+                  <th class="px-4 py-3">Aluno</th>
+                  <th class="px-4 py-3">Email</th>
+                  <th class="px-4 py-3">Nível</th>
+                  <th class="px-4 py-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (student of admin.students(); track student.id) {
+                  <tr
+                    [class]="
+                      student.id === selectedUserId
+                        ? 'border-t border-gold-500/10 bg-gold-500/10 transition hover:bg-gold-500/5'
+                        : 'border-t border-gold-500/10 transition hover:bg-gold-500/5'
+                    "
+                  >
+                    <td class="px-4 py-3 text-slate-400">#{{ student.id }}</td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-3">
+                        <div
+                          class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/30 bg-gold-500/10 text-xs font-semibold text-gold-300"
+                        >
+                          @if (student.avatar_url) {
+                            <img [src]="student.avatar_url" alt="" class="h-full w-full object-cover" />
+                          } @else {
+                            {{ studentInitials(student.name) }}
+                          }
+                        </div>
+                        <span class="font-medium text-slate-100">{{ student.name }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-slate-300">{{ student.email }}</td>
+                    <td class="px-4 py-3 text-gold-300/90">{{ student.student_level }}</td>
+                    <td class="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        (click)="selectStudent(student.id)"
+                        class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </article>
+
+      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+        <h2 class="mb-1 text-lg font-medium text-gold-300">Editar Aulas e Vídeo-aulas</h2>
+        <p class="mb-4 text-xs text-slate-500">Crie, edite, envie vídeos ou exclua lições por curso.</p>
+
+        <label class="mb-4 block text-xs text-slate-400">Curso</label>
+        <select
+          [(ngModel)]="lessonCourseId"
+          (ngModelChange)="onLessonCourseChange()"
+          name="lessonCourseId"
+          class="mb-6 w-full max-w-md rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
+        >
+          @for (course of admin.courses(); track course.id) {
+            <option [ngValue]="course.id">{{ course.title }}</option>
+          }
+        </select>
+
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <form class="space-y-3 rounded-lg border border-gold-500/20 p-4" (ngSubmit)="createLesson()">
+            <h3 class="text-sm font-medium text-gold-300">Nova aula</h3>
+            <input
+              [(ngModel)]="newLesson.module_name"
+              name="newLessonModule"
+              required
+              placeholder="Módulo (ex: Módulo 1)"
+              class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
+            />
+            <input
+              [(ngModel)]="newLesson.title"
+              name="newLessonTitle"
+              required
+              placeholder="Título da aula"
+              class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
+            />
+            <textarea
+              [(ngModel)]="newLesson.content_md"
+              name="newLessonContent"
+              rows="4"
+              placeholder="Descrição / conteúdo da aula"
+              class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
+            ></textarea>
+            <label class="block text-xs text-slate-400">Upload vídeo (MP4, WEBM, MOV — até 100 MB)</label>
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+              (change)="onNewLessonVideo($event)"
+              [disabled]="videoUploading()"
+              class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gold-500/20 file:px-2 file:py-1 file:text-gold-300"
+            />
+            @if (newLesson.video_url) {
+              <p class="truncate text-xs text-gold-300">Vídeo anexado</p>
+            }
+            @if (videoUploading()) {
+              <p class="text-xs text-gold-300">Enviando vídeo...</p>
+            }
+            <button
+              type="submit"
+              [disabled]="!lessonCourseId || videoUploading()"
+              class="rounded border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+            >
+              Criar aula
+            </button>
+          </form>
+
+          <div class="space-y-3">
+            <h3 class="text-sm font-medium text-gold-300">
+              Aulas cadastradas ({{ admin.lessons().length }})
+            </h3>
+            <div class="max-h-[28rem] space-y-3 overflow-auto pr-1">
+              @if (admin.lessons().length === 0) {
+                <p class="rounded-lg border border-gold-500/15 bg-obsidian-800/50 px-4 py-6 text-center text-sm text-slate-500">
+                  Nenhuma aula neste curso. Crie a primeira ao lado.
+                </p>
+              }
+              @for (lesson of admin.lessons(); track lesson.id) {
+                <form
+                  class="space-y-2 rounded-lg border border-gold-500/20 bg-obsidian-800/40 p-3"
+                  (ngSubmit)="saveLesson(lesson)"
+                >
+                  <p class="text-xs text-slate-500">Aula #{{ lesson.id }}</p>
+                  <input
+                    [(ngModel)]="lesson.module_name"
+                    [name]="'lessonMod-' + lesson.id"
+                    placeholder="Módulo"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    [(ngModel)]="lesson.title"
+                    [name]="'lessonTitle-' + lesson.id"
+                    placeholder="Título"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1.5 text-sm"
+                  />
+                  <textarea
+                    [(ngModel)]="lesson.content_md"
+                    [name]="'lessonContent-' + lesson.id"
+                    rows="3"
+                    placeholder="Conteúdo da aula"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1.5 text-sm"
+                  ></textarea>
+                  <label class="block text-xs text-slate-400">Substituir vídeo</label>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                    (change)="onLessonVideoUpload(lesson, $event)"
+                    [disabled]="videoUploading()"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1 text-xs"
+                  />
+                  @if (lesson.video_url) {
+                    <a
+                      [href]="lesson.video_url"
+                      target="_blank"
+                      rel="noopener"
+                      class="block truncate text-xs text-gold-300 hover:underline"
+                    >
+                      Ver vídeo atual
+                    </a>
+                  }
+                  <div class="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="submit"
+                      [disabled]="lessonSavingId() === lesson.id"
+                      class="rounded border border-gold-500/40 px-3 py-1.5 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+                    >
+                      {{ lessonSavingId() === lesson.id ? 'Salvando...' : 'Salvar aula' }}
+                    </button>
+                    <button
+                      type="button"
+                      (click)="deleteLesson(lesson)"
+                      class="rounded border border-red-400/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </form>
+              }
+            </div>
+          </div>
+        </div>
+      </article>
 
       <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
@@ -81,7 +299,8 @@ import { AdminCourse, AdminService } from '../services/admin.service';
         </article>
 
         <article class="mb-4 rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-          <h2 class="mb-4 text-lg font-medium text-gold-300">Editar Perfil do Aluno</h2>
+          <h2 class="mb-1 text-lg font-medium text-gold-300">Editar Perfil do Aluno</h2>
+          <p class="mb-4 text-xs text-slate-500">Novos cadastros aparecem automaticamente na lista abaixo.</p>
           <form class="space-y-3" (ngSubmit)="saveStudentProfile()">
             <input
               [(ngModel)]="studentProfile.name"
@@ -105,12 +324,37 @@ import { AdminCourse, AdminService } from '../services/admin.service';
               placeholder="Nível (ex: Platinum Scholar)"
               class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
             />
+            <div class="flex flex-wrap items-center gap-3">
+              @if (studentProfile.avatarUrl) {
+                <img
+                  [src]="studentProfile.avatarUrl"
+                  alt="Avatar do aluno"
+                  class="h-14 w-14 rounded-full border border-gold-500/30 object-cover"
+                />
+              }
+              <div class="min-w-0 flex-1">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  (change)="onStudentAvatarSelected($event)"
+                  [disabled]="!selectedUserId || avatarUploading()"
+                  class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gold-500/20 file:px-2 file:py-1 file:text-xs file:text-gold-300"
+                />
+                @if (avatarUploading()) {
+                  <p class="mt-1 text-xs text-gold-300">Enviando foto...</p>
+                }
+              </div>
+            </div>
             <input
               [(ngModel)]="studentProfile.avatarUrl"
               name="studentProfileAvatar"
-              placeholder="URL do avatar"
+              placeholder="URL do avatar (opcional)"
               class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
             />
+            <label class="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" [(ngModel)]="studentProfile.isInstructor" name="studentIsInstructor" />
+              Usuário instrutor (gerencia vídeo-aulas)
+            </label>
             <button
               type="submit"
               [disabled]="profileSaving()"
@@ -202,32 +446,88 @@ import { AdminCourse, AdminService } from '../services/admin.service';
     </section>
   `,
 })
-export class SuperAdminDashboardComponent implements OnInit {
+export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   readonly admin = inject(AdminService);
   private readonly auth = inject(AuthService);
+  private refreshTimer?: ReturnType<typeof setInterval>;
+  private static readonly REFRESH_MS = 8000;
 
   selectedUserId: number | null = null;
   selectedCourseId: number | null = null;
+  lessonCourseId: number | null = null;
   subject = '';
   details = '';
   readonly loading = signal(false);
   readonly profileSaving = signal(false);
+  readonly avatarUploading = signal(false);
+  readonly videoUploading = signal(false);
+  readonly lessonSavingId = signal<number | null>(null);
   readonly imageUploading = signal<Record<number, boolean>>({});
   newCourse = this.emptyCourseForm();
+  newLesson = {
+    module_name: '',
+    title: '',
+    content_md: '',
+    video_url: '',
+  };
   studentProfile = {
     name: '',
     email: '',
     studentLevel: '',
     avatarUrl: '',
+    isInstructor: false,
   };
 
   async ngOnInit(): Promise<void> {
     await this.admin.loadDashboardData();
-    const firstStudent = this.admin.students()[0];
-    if (firstStudent) {
-      this.selectedUserId = firstStudent.id;
-      this.onStudentChange();
+    this.syncSelectedStudent();
+    const firstCourse = this.admin.courses()[0];
+    if (firstCourse) {
+      this.lessonCourseId = firstCourse.id;
+      await this.admin.loadLessons(firstCourse.id);
     }
+    this.refreshTimer = setInterval(() => {
+      void this.pollDashboard();
+    }, SuperAdminDashboardComponent.REFRESH_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+    }
+  }
+
+  private async pollDashboard(): Promise<void> {
+    const newCount = await this.admin.refreshDashboard(true);
+    this.syncSelectedStudent(newCount > 0);
+  }
+
+  private syncSelectedStudent(preferNewest = false): void {
+    const students = this.admin.students();
+    if (students.length === 0) {
+      this.selectedUserId = null;
+      return;
+    }
+
+    const stillExists = students.some((student) => student.id === this.selectedUserId);
+    if (!stillExists || preferNewest) {
+      this.selectedUserId = students[0].id;
+    }
+    this.onStudentChange();
+  }
+
+  selectStudent(studentId: number): void {
+    this.selectedUserId = studentId;
+    this.onStudentChange();
+  }
+
+  studentInitials(name: string): string {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('');
   }
 
   onStudentChange(): void {
@@ -238,6 +538,7 @@ export class SuperAdminDashboardComponent implements OnInit {
       email: student.email,
       studentLevel: student.student_level,
       avatarUrl: student.avatar_url ?? '',
+      isInstructor: student.is_instructor ?? false,
     };
   }
 
@@ -253,6 +554,7 @@ export class SuperAdminDashboardComponent implements OnInit {
         email: this.studentProfile.email,
         studentLevel: this.studentProfile.studentLevel,
         avatarUrl: this.studentProfile.avatarUrl || null,
+        isInstructor: this.studentProfile.isInstructor,
       });
       this.onStudentChange();
     } catch {
@@ -269,6 +571,88 @@ export class SuperAdminDashboardComponent implements OnInit {
   async createNewCourse(): Promise<void> {
     await this.admin.createCourse(this.newCourse);
     this.newCourse = this.emptyCourseForm();
+  }
+
+  async onLessonCourseChange(): Promise<void> {
+    if (!this.lessonCourseId) return;
+    await this.admin.loadLessons(this.lessonCourseId);
+  }
+
+  async createLesson(): Promise<void> {
+    if (!this.lessonCourseId) return;
+    await this.admin.createLesson({
+      course_id: this.lessonCourseId,
+      module_name: this.newLesson.module_name,
+      title: this.newLesson.title,
+      content_md: this.newLesson.content_md,
+      video_url: this.newLesson.video_url,
+    });
+    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '' };
+  }
+
+  async saveLesson(lesson: AdminLesson): Promise<void> {
+    this.lessonSavingId.set(lesson.id);
+    try {
+      await this.admin.updateLesson(lesson);
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.lessonSavingId.set(null);
+    }
+  }
+
+  async deleteLesson(lesson: AdminLesson): Promise<void> {
+    const confirmed = window.confirm(`Excluir a aula "${lesson.title}"?`);
+    if (!confirmed) return;
+    await this.admin.deleteLesson(lesson);
+  }
+
+  async onNewLessonVideo(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      this.newLesson.video_url = await this.admin.uploadLessonVideo(file);
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.videoUploading.set(false);
+      input.value = '';
+    }
+  }
+
+  async onLessonVideoUpload(lesson: AdminLesson, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      lesson.video_url = await this.admin.uploadLessonVideo(file);
+      await this.admin.updateLesson(lesson);
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.videoUploading.set(false);
+      input.value = '';
+    }
+  }
+
+  async onStudentAvatarSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.selectedUserId) return;
+
+    this.avatarUploading.set(true);
+    try {
+      const imageUrl = await this.admin.uploadStudentAvatar(this.selectedUserId, file);
+      this.studentProfile.avatarUrl = imageUrl;
+    } catch {
+      // Error handled by AdminService.
+    } finally {
+      this.avatarUploading.set(false);
+      input.value = '';
+    }
   }
 
   async onCourseImageSelected(course: AdminCourse, event: Event): Promise<void> {

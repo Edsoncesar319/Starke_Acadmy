@@ -21,17 +21,31 @@ import { PortalDataService } from '../services/portal-data.service';
       }
 
       <form class="space-y-4 rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-6" (ngSubmit)="save()">
-        <div class="flex items-center gap-4">
-          <div class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 bg-gold-500/10 text-lg font-semibold text-gold-300">
-            @if (form.avatarUrl) {
-              <img [src]="form.avatarUrl" alt="Avatar" class="h-full w-full object-cover" />
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 bg-gold-500/10 text-lg font-semibold text-gold-300">
+            @if (data.student().avatarUrl) {
+              <img [src]="data.student().avatarUrl" alt="Avatar" class="h-full w-full object-cover" />
             } @else {
               {{ initials() }}
             }
           </div>
-          <div>
-            <p class="text-sm text-slate-300">Nível atual</p>
-            <p class="text-gold-300">{{ data.student().studentLevel }}</p>
+          <div class="min-w-0 flex-1 space-y-2">
+            <div>
+              <p class="text-sm text-slate-300">Nível atual</p>
+              <p class="text-gold-300">{{ data.student().studentLevel }}</p>
+            </div>
+            <label class="block text-xs text-slate-400">Foto de perfil</label>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              (change)="onAvatarSelected($event)"
+              [disabled]="avatarUploading()"
+              class="w-full max-w-sm rounded-lg border border-gold-500/25 bg-obsidian-800 px-3 py-2 text-xs file:mr-3 file:rounded file:border-0 file:bg-gold-500/20 file:px-3 file:py-1 file:text-xs file:text-gold-300"
+            />
+            @if (avatarUploading()) {
+              <p class="text-xs text-gold-300">Enviando foto...</p>
+            }
+            <p class="text-xs text-slate-500">PNG, JPG ou WEBP — até 5 MB</p>
           </div>
         </div>
 
@@ -48,12 +62,6 @@ import { PortalDataService } from '../services/portal-data.service';
           type="email"
           required
           placeholder="Email"
-          class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
-        />
-        <input
-          [(ngModel)]="form.avatarUrl"
-          name="avatarUrl"
-          placeholder="URL da foto de perfil (opcional)"
           class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
         />
 
@@ -82,11 +90,11 @@ import { PortalDataService } from '../services/portal-data.service';
 export class ProfileComponent implements OnInit {
   readonly data = inject(PortalDataService);
   readonly saving = signal(false);
+  readonly avatarUploading = signal(false);
 
   form = {
     name: '',
     email: '',
-    avatarUrl: '',
     password: '',
   };
 
@@ -96,7 +104,6 @@ export class ProfileComponent implements OnInit {
     this.form = {
       name: student.name,
       email: student.email,
-      avatarUrl: student.avatarUrl ?? '',
       password: '',
     };
   }
@@ -110,13 +117,29 @@ export class ProfileComponent implements OnInit {
       .join('');
   }
 
+  async onAvatarSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.avatarUploading.set(true);
+    try {
+      await this.data.uploadAvatar(file);
+    } catch {
+      // Error handled by PortalDataService.
+    } finally {
+      this.avatarUploading.set(false);
+      input.value = '';
+    }
+  }
+
   async save(): Promise<void> {
     this.saving.set(true);
     try {
       await this.data.updateProfile({
         name: this.form.name,
         email: this.form.email,
-        avatarUrl: this.form.avatarUrl || null,
+        avatarUrl: this.data.student().avatarUrl,
         password: this.form.password || null,
       });
       this.form.password = '';

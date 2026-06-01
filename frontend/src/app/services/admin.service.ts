@@ -1,7 +1,8 @@
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../environments/environment';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
+import { videoValidationError } from '../utils/video-upload.util';
 
 export interface AdminCourse {
   id: number;
@@ -29,6 +30,7 @@ export interface AdminUser {
   student_level: string;
   avatar_url: string | null;
   is_admin: boolean;
+  is_instructor: boolean;
 }
 
 export interface AdminSentMessage {
@@ -40,25 +42,69 @@ export interface AdminSentMessage {
   created_at: string;
 }
 
+export interface AdminLesson {
+  id: number;
+  course_id: number;
+  module_name: string;
+  title: string;
+  video_url: string;
+  content_md: string;
+}
+
+export interface AdminLessonCreate {
+  course_id: number;
+  module_name: string;
+  title: string;
+  video_url: string;
+  content_md: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
-  private readonly apiUrl = environment.apiUrl;
+  private readonly apiUrl = 'http://127.0.0.1:8000';
   readonly courses = signal<AdminCourse[]>([]);
   readonly students = signal<AdminUser[]>([]);
   readonly sentMessages = signal<AdminSentMessage[]>([]);
+  readonly lessons = signal<AdminLesson[]>([]);
   readonly status = signal<string | null>(null);
   readonly error = signal<string | null>(null);
-  private readonly maxUploadBytes = 5 * 1024 * 1024;
-
   constructor(private readonly http: HttpClient) {}
 
   async loadDashboardData(): Promise<void> {
-    const [courses, users] = await Promise.all([
-      firstValueFrom(this.http.get<AdminCourse[]>(`${this.apiUrl}/courses`)),
-      firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/users`)),
-    ]);
+    await this.refreshDashboard(false);
+  }
+
+  async loadCoursesForContent(): Promise<void> {
+    const courses = await firstValueFrom(this.http.get<AdminCourse[]>(`${this.apiUrl}/courses`));
     this.courses.set(courses);
-    this.students.set(users.filter((user) => !user.is_admin));
+  }
+
+  async refreshDashboard(silent = true): Promise<number> {
+    try {
+      const [courses, students, messages] = await Promise.all([
+        firstValueFrom(this.http.get<AdminCourse[]>(`${this.apiUrl}/courses`)),
+        firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/students`)),
+        firstValueFrom(this.http.get<AdminSentMessage[]>(`${this.apiUrl}/admin/messages`)),
+      ]);
+      const previousIds = new Set(this.students().map((student) => student.id));
+      const newStudents = students.filter((student) => !previousIds.has(student.id));
+
+      this.courses.set(courses);
+      this.students.set(students);
+      this.sentMessages.set(messages);
+
+      if (newStudents.length > 0 && !silent) {
+        const label = newStudents.length === 1 ? '1 novo aluno matriculado' : `${newStudents.length} novos alunos matriculados`;
+        this.status.set(`${label}. Lista atualizada.`);
+      }
+
+      return newStudents.length;
+    } catch {
+      if (!silent) {
+        this.error.set('Não foi possível atualizar os dados do painel.');
+      }
+      return 0;
+    }
   }
 
   async updateCourse(course: AdminCourse): Promise<void> {
@@ -80,14 +126,29 @@ export class AdminService {
   }
 
   async uploadCourseImage(file: File): Promise<string> {
+    return this.uploadImage(file, `${this.apiUrl}/admin/courses/upload-image`, 'Imagem enviada com sucesso.');
+  }
+
+  async uploadStudentAvatar(studentId: number, file: File): Promise<string> {
+    const imageUrl = await this.uploadImage(
+      file,
+      `${this.apiUrl}/admin/students/${studentId}/upload-avatar`,
+      'Foto do aluno atualizada.',
+    );
+    this.students.update((list) =>
+      list.map((student) => (student.id === studentId ? { ...student, avatar_url: imageUrl } : student)),
+    );
+    return imageUrl;
+  }
+
+  private async uploadImage(file: File, endpoint: string, successMessage: string): Promise<string> {
     this.error.set(null);
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       throw new Error('Formato inválido. Use PNG, JPG ou WEBP.');
     }
 
-    const preparedFile = await this.optimizeImage(file);
-    if (preparedFile.size > this.maxUploadBytes) {
+    const preparedFile = await prepareImageForUpload(file);
+    if (preparedFile.size > MAX_UPLOAD_BYTES) {
       throw new Error('Imagem muito grande mesmo após compressão. Use um arquivo menor.');
     }
 
@@ -95,53 +156,13 @@ export class AdminService {
     formData.append('file', preparedFile);
     try {
       const response = await firstValueFrom(
-        this.http.post<{ image_url: string }>(`${this.apiUrl}/admin/courses/upload-image`, formData),
+        this.http.post<{ image_url: string }>(endpoint, formData),
       );
-      this.status.set('Imagem enviada com sucesso.');
+      this.status.set(successMessage);
       return response.image_url;
     } catch {
       this.error.set('Falha no upload da imagem. Verifique formato e tamanho.');
       throw new Error('Falha no upload da imagem.');
-    }
-  }
-
-  private async optimizeImage(file: File): Promise<File> {
-    // Keep small files untouched for max quality.
-    if (file.size <= 900 * 1024) return file;
-
-    const image = await this.loadImage(file);
-    const maxDimension = 1600;
-    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-    const width = Math.max(1, Math.floor(image.width * scale));
-    const height = Math.max(1, Math.floor(image.height * scale));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) return file;
-    context.drawImage(image, 0, 0, width, height);
-
-    const outputType = file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, outputType, 0.82);
-    });
-    if (!blob) return file;
-
-    const extension = outputType === 'image/webp' ? 'webp' : 'jpg';
-    const filename = `${file.name.replace(/\.[^/.]+$/, '')}.${extension}`;
-    return new File([blob], filename, { type: outputType });
-  }
-
-  private async loadImage(file: File): Promise<HTMLImageElement> {
-    const objectUrl = URL.createObjectURL(file);
-    try {
-      const image = new Image();
-      image.src = objectUrl;
-      await image.decode();
-      return image;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
     }
   }
 
@@ -152,6 +173,7 @@ export class AdminService {
       email: string;
       studentLevel: string;
       avatarUrl: string | null;
+      isInstructor: boolean;
     },
   ): Promise<void> {
     this.error.set(null);
@@ -162,6 +184,7 @@ export class AdminService {
           email: payload.email.trim(),
           student_level: payload.studentLevel.trim(),
           avatar_url: payload.avatarUrl,
+          is_instructor: payload.isInstructor,
         }),
       );
       this.status.set(`Perfil do aluno "${payload.name}" atualizado.`);
@@ -170,6 +193,74 @@ export class AdminService {
       this.error.set('Falha ao atualizar perfil do aluno.');
       throw new Error('Falha ao atualizar perfil do aluno.');
     }
+  }
+
+  async loadLessons(courseId: number): Promise<void> {
+    const lessons = await firstValueFrom(
+      this.http.get<AdminLesson[]>(`${this.apiUrl}/admin/courses/${courseId}/lessons`),
+    );
+    this.lessons.set(lessons);
+  }
+
+  async createLesson(payload: AdminLessonCreate): Promise<void> {
+    this.error.set(null);
+    await firstValueFrom(this.http.post(`${this.apiUrl}/admin/lessons`, payload));
+    this.status.set(`Aula "${payload.title}" criada.`);
+    await this.loadLessons(payload.course_id);
+  }
+
+  async updateLesson(lesson: AdminLesson): Promise<void> {
+    this.error.set(null);
+    await firstValueFrom(
+      this.http.put(`${this.apiUrl}/admin/lessons/${lesson.id}`, {
+        module_name: lesson.module_name.trim(),
+        title: lesson.title.trim(),
+        video_url: lesson.video_url.trim(),
+        content_md: lesson.content_md.trim(),
+      }),
+    );
+    this.status.set(`Aula "${lesson.title}" atualizada.`);
+    await this.loadLessons(lesson.course_id);
+  }
+
+  async deleteLesson(lesson: AdminLesson): Promise<void> {
+    await firstValueFrom(this.http.delete(`${this.apiUrl}/admin/lessons/${lesson.id}`));
+    this.status.set(`Aula "${lesson.title}" excluída.`);
+    await this.loadLessons(lesson.course_id);
+  }
+
+  async uploadLessonVideo(file: File): Promise<string> {
+    this.error.set(null);
+    const validationMessage = videoValidationError(file);
+    if (validationMessage) {
+      this.error.set(validationMessage);
+      throw new Error(validationMessage);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ video_url: string }>(`${this.apiUrl}/admin/lessons/upload-video`, formData),
+      );
+      this.status.set('Vídeo da aula enviado com sucesso.');
+      return response.video_url;
+    } catch (err) {
+      const message = this.extractUploadError(err);
+      this.error.set(message);
+      throw new Error(message);
+    }
+  }
+
+  private extractUploadError(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const detail = err.error?.detail;
+      if (typeof detail === 'string') return detail;
+      if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg);
+      if (err.status === 0) return 'Sem conexão com o servidor. Verifique se o backend está ativo na porta 8000.';
+      if (err.status === 413) return 'Vídeo muito grande. Máximo 100 MB.';
+    }
+    return 'Falha no upload do vídeo. Use MP4, WEBM ou MOV (até 100 MB).';
   }
 
   async sendStudentDetails(payload: {

@@ -39,13 +39,18 @@ export class AppComponent {
   }
 
   private shouldShowShell(url: string): boolean {
-    return url !== '/login' && url !== '/admin/login' && !url.startsWith('/admin/');
+    return (
+      url !== '/login' &&
+      url !== '/matricula' &&
+      url !== '/admin/login' &&
+      !url.startsWith('/admin/')
+    );
   }
 
   private async initializeSession(): Promise<void> {
     try {
       const profile = await this.auth.loadProfile();
-      if (!profile.is_admin) {
+      if (!profile.is_admin && !profile.is_instructor) {
         await this.data.refreshPortalData();
       }
     } catch {
