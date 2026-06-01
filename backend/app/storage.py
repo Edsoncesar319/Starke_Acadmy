@@ -15,7 +15,7 @@ UPLOAD_DIR = Path(
 VIDEO_UPLOAD_DIR = UPLOAD_DIR / "videos"
 API_PUBLIC_BASE_URL = os.getenv(
     "API_PUBLIC_BASE_URL",
-    "/_/backend" if os.getenv("VERCEL") else "http://127.0.0.1:8000",
+    "/api" if os.getenv("VERCEL") else "http://127.0.0.1:8000",
 ).rstrip("/")
 
 # Vercel Functions limit request bodies to ~4.5 MB on server uploads.
