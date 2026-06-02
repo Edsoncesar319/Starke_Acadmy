@@ -560,9 +560,17 @@ async def admin_upload_lesson_video(
 
 
 # Composite app: API under /api, Angular static files at /
-PUBLIC_DIR = Path(__file__).resolve().parents[2] / "public"
-if (PUBLIC_DIR / "browser" / "index.html").is_file() and not (PUBLIC_DIR / "index.html").is_file():
-    PUBLIC_DIR = PUBLIC_DIR / "browser"
+def _resolve_public_dir() -> Path:
+    public = Path(__file__).resolve().parents[2] / "public"
+    if (public / "index.html").is_file():
+        return public
+    nested = public / "browser"
+    if (nested / "index.html").is_file():
+        return nested
+    return public
+
+
+PUBLIC_DIR = _resolve_public_dir()
 api = app
 application = FastAPI(title="Starke Academy Portal")
 application.mount("/api", api)
