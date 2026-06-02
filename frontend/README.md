@@ -1,12 +1,27 @@
 # Starke Academy Elite Portal
 
-Frontend in Angular 17 (Signals + Standalone + Tailwind) with backend in FastAPI + SQLite.
+Angular 17 + FastAPI. Em produção, frontend e API rodam no mesmo domínio Vercel.
 
-## Run the application
+## Produção
 
-Open two terminals.
+- **Site:** https://starke-acadmy.vercel.app  
+- **API:** https://starke-acadmy.vercel.app/api  
+- **Health:** https://starke-acadmy.vercel.app/api/health  
 
-### 1) Backend (FastAPI)
+### Variáveis na Vercel (recomendado)
+
+1. [Projeto → Settings → Storage](https://vercel.com) → **Postgres** → conectar ao `starke-acadmy`  
+2. **Blob** → criar store e conectar  
+3. **Environment Variables** → adicionar `AUTH_SECRET_KEY` (string aleatória longa)  
+4. Redeploy após conectar o storage  
+
+Sem Postgres, a API usa SQLite em `/tmp` (dados podem sumir entre deploys).
+
+## Desenvolvimento local
+
+Dois terminais.
+
+### Backend
 
 ```bash
 cd backend
@@ -15,10 +30,10 @@ python -m venv .venv
 .\.venv\Scripts\uvicorn app.main:app --reload --port 8000
 ```
 
-Backend URL: `http://127.0.0.1:8000`  
-Health check: `http://127.0.0.1:8000/health`
+- API: `http://127.0.0.1:8000/api`  
+- Health: `http://127.0.0.1:8000/api/health`  
 
-### 2) Frontend (Angular)
+### Frontend
 
 ```bash
 cd frontend
@@ -26,30 +41,30 @@ npm install
 npm start
 ```
 
-Frontend URL: `http://localhost:4200`
+- App: `http://localhost:4200`  
 
-## Login (seed user)
+## Login (seed)
 
-- Email: `evelyn@starke.academy`
-- Password: `elite123`
+| Perfil | Email | Senha |
+|--------|-------|-------|
+| Aluno | `evelyn@starke.academy` | `elite123` |
+| Admin | `admin@starke.academy` | `admin123` |
 
-## Useful commands
-
-### Frontend
+## Build
 
 ```bash
 cd frontend
 npm run build
 ```
 
-### Backend
+Saída em `public/` (usado no deploy Vercel).
+
+## Deploy manual
+
+Na raiz do repositório:
 
 ```bash
-cd backend
-.\.venv\Scripts\python -c "from app.main import app; print(app.title)"
+vercel deploy --prod
 ```
 
-## Notes
-
-- If backend dependency install fails with bcrypt/passlib conflict, ensure `bcrypt==4.0.1` is present in `backend/requirements.txt`.
-- Start backend first, then frontend.
+O build roda `backend/scripts/vercel_build.py` (Angular → `public/` + FastAPI).

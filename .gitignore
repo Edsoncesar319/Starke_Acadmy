@@ -12,11 +12,11 @@ dist/
 .angular/
 
 .vercel/
+.env*.local
+.vercel-spa-staging/
 
 public/*
 !public/.gitkeep
 
 backend/uploads/*
 !backend/uploads/.gitkeep
-.vercel
-.env*.local
