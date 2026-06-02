@@ -578,6 +578,11 @@ def _resolve_public_dir() -> Path | None:
         repo_root / "public",
         backend_root / "public",
         backend_root / "app" / "public",
+        # Vercel pode realocar o entrypoint; tentamos também o caminho
+        # "backend/app/public" relativo ao diretório que contenha `main.py`.
+        backend_root / "backend" / "app" / "public",
+        backend_root / "backend" / "public",
+        task_root / "backend" / "app" / "public",
     ]
     if task_root.is_dir():
         candidates.extend(
