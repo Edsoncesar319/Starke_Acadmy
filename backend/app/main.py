@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -550,6 +549,12 @@ def admin_delete_lesson(
     db.commit()
 
 
+@app.get("/admin/blob/upload-authorize")
+def authorize_lesson_video_blob_upload(_: User = Depends(get_current_content_manager)):
+    """Usado pelo handler Node de client upload do Vercel Blob."""
+    return {"ok": True}
+
+
 @app.post("/admin/lessons/upload-video")
 async def admin_upload_lesson_video(
     file: UploadFile = File(...),
@@ -561,13 +566,15 @@ async def admin_upload_lesson_video(
 
 # Composite app: API under /api, Angular static files at /
 def _resolve_public_dir() -> Path:
-    public = Path(__file__).resolve().parents[2] / "public"
-    if (public / "index.html").is_file():
-        return public
-    nested = public / "browser"
-    if (nested / "index.html").is_file():
-        return nested
-    return public
+    backend_root = Path(__file__).resolve().parents[1]
+    repo_root = backend_root.parent
+    for public in (backend_root / "public", repo_root / "public"):
+        if (public / "index.html").is_file():
+            return public
+        nested = public / "browser"
+        if (nested / "index.html").is_file():
+            return nested
+    return backend_root / "public"
 
 
 PUBLIC_DIR = _resolve_public_dir()
@@ -575,29 +582,21 @@ api = app
 application = FastAPI(title="Starke Academy Portal")
 application.mount("/api", api)
 
+_spa_index = PUBLIC_DIR / "index.html"
+if _spa_index.is_file():
+    application.mount(
+        "/",
+        StaticFiles(directory=str(PUBLIC_DIR), html=True),
+        name="spa",
+    )
+else:
 
-@application.get("/")
-async def serve_portal_index():
-    index = PUBLIC_DIR / "index.html"
-    if index.is_file():
-        return FileResponse(index)
-    return {"status": "ok", "message": "Build the frontend to populate /public"}
-
-
-@application.get("/{path:path}")
-async def serve_portal_assets(path: str):
-    if path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="Not found")
-
-    asset = PUBLIC_DIR / path
-    if asset.is_file():
-        return FileResponse(asset)
-
-    index = PUBLIC_DIR / "index.html"
-    if index.is_file():
-        return FileResponse(index)
-
-    raise HTTPException(status_code=404, detail="Not found")
+    @application.get("/")
+    async def serve_portal_placeholder():
+        return {
+            "status": "ok",
+            "message": "Build the frontend (npm run build) into backend/public",
+        }
 
 
 app = application

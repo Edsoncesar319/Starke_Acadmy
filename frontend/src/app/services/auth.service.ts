@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 interface AuthProfile {
   id: number;
@@ -12,7 +13,7 @@ interface AuthProfile {
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly apiUrl = 'http://127.0.0.1:8000';
+  private readonly apiUrl = environment.apiUrl;
   private readonly tokenKey = 'elite_token';
   private readonly roleKey = 'elite_role';
   private readonly _token = signal<string | null>(localStorage.getItem(this.tokenKey));

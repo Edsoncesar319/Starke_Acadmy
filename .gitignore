@@ -17,6 +17,8 @@ dist/
 
 public/*
 !public/.gitkeep
+backend/public/*
+!backend/public/.gitkeep
 
 backend/uploads/*
 !backend/uploads/.gitkeep

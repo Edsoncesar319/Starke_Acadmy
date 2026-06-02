@@ -1,8 +1,11 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { upload } from '@vercel/blob/client';
 import { firstValueFrom } from 'rxjs';
+import { environment } from '../../environments/environment';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
-import { videoValidationError } from '../utils/video-upload.util';
+import { SERVER_VIDEO_UPLOAD_BYTES, videoValidationError } from '../utils/video-upload.util';
+import { AuthService } from './auth.service';
 
 export interface AdminCourse {
   id: number;
@@ -61,7 +64,8 @@ export interface AdminLessonCreate {
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
-  private readonly apiUrl = 'http://127.0.0.1:8000';
+  private readonly apiUrl = environment.apiUrl;
+  private readonly auth = inject(AuthService);
   readonly courses = signal<AdminCourse[]>([]);
   readonly students = signal<AdminUser[]>([]);
   readonly sentMessages = signal<AdminSentMessage[]>([]);
@@ -237,6 +241,10 @@ export class AdminService {
       throw new Error(validationMessage);
     }
 
+    if (environment.useBlobClientUpload && file.size > SERVER_VIDEO_UPLOAD_BYTES) {
+      return this.uploadLessonVideoViaBlob(file);
+    }
+
     const formData = new FormData();
     formData.append('file', file, file.name);
     try {
@@ -247,6 +255,31 @@ export class AdminService {
       return response.video_url;
     } catch (err) {
       const message = this.extractUploadError(err);
+      this.error.set(message);
+      throw new Error(message);
+    }
+  }
+
+  private async uploadLessonVideoViaBlob(file: File): Promise<string> {
+    const token = this.auth.token();
+    if (!token) {
+      const message = 'Faça login para enviar vídeo.';
+      this.error.set(message);
+      throw new Error(message);
+    }
+
+    try {
+      const result = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: environment.blobClientUploadUrl,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      this.status.set('Vídeo da aula enviado com sucesso.');
+      return result.url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Falha no upload do vídeo via Blob.';
       this.error.set(message);
       throw new Error(message);
     }

@@ -1,6 +1,10 @@
 {
   "name": "starke-academy",
   "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "^1.1.1"
+  },
   "scripts": {
     "build:frontend": "cd frontend && npm ci && npm run build",
     "build:public": "python backend/scripts/vercel_build.py"

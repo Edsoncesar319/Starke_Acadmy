@@ -340,7 +340,12 @@ export class LessonPlayerComponent implements OnInit {
 
   hasPlayableVideo(url: string): boolean {
     if (!url?.trim()) return false;
-    return url.includes('/uploads/videos/') || url.startsWith('blob:') || /\.(mp4|webm|mov)(\?|$)/i.test(url);
+    return (
+      url.includes('/uploads/videos/') ||
+      url.includes('.public.blob.vercel-storage.com') ||
+      url.startsWith('blob:') ||
+      /\.(mp4|webm|mov)(\?|$)/i.test(url)
+    );
   }
 
   courseProgress(): number | null {

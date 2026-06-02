@@ -1,4 +1,6 @@
 export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
+/** Limite de upload via servidor na Vercel (Functions). */
+export const SERVER_VIDEO_UPLOAD_BYTES = 4 * 1024 * 1024;
 const ALLOWED_VIDEO_EXTENSIONS = /\.(mp4|webm|mov)$/i;
 
 export function isAllowedVideoFile(file: File): boolean {

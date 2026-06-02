@@ -11,7 +11,7 @@ NPM = "npm.cmd" if platform.system() == "Windows" else "npm"
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
-PUBLIC = ROOT / "public"
+PUBLIC = ROOT / "backend" / "public"
 
 
 def run(cmd: list[str], cwd: Path) -> None:
@@ -38,9 +38,12 @@ def install_frontend() -> None:
 
 def find_build_output() -> Path:
     """Return directory that contains index.html after ng build."""
+    legacy_public = ROOT / "public"
     candidates = [
         PUBLIC,
         PUBLIC / "browser",
+        legacy_public,
+        legacy_public / "browser",
         FRONTEND / "dist" / "elite-portal",
         FRONTEND / "dist" / "elite-portal" / "browser",
     ]
@@ -110,8 +113,10 @@ def main() -> None:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
 
+    flatten_browser_subfolder()
+
     if not (PUBLIC / "index.html").is_file():
-        print("Missing public/index.html after publish step", file=sys.stderr)
+        print("Missing backend/public/index.html after publish step", file=sys.stderr)
         sys.exit(1)
 
     print(f"SPA ready: {PUBLIC / 'index.html'}", flush=True)
