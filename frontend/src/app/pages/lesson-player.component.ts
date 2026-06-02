@@ -204,32 +204,49 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                 <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
                   {{ lesson.contentMd || 'Sem descrição para esta aula.' }}
                 </p>
-                @if (auth.isStudent()) {
-                  <button
-                    type="button"
-                    (click)="markProgress()"
-                    [disabled]="!selectedCourseId()"
-                    class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
-                  >
-                    Marcar +10% de progresso
-                  </button>
-                  @if (courseProgress() !== null) {
-                    <p class="mt-2 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
-                  }
+                @if (courseProgress() !== null) {
+                  <p class="mt-4 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
                 }
               </article>
               <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-                <h5 class="text-gold-300">Recursos</h5>
-                <ul class="mt-2 space-y-2 text-sm text-slate-300">
-                  @if (hasPlayableVideo(lesson.videoUrl)) {
-                    <li>
-                      <a [href]="lesson.videoUrl" target="_blank" rel="noopener" class="text-gold-300 hover:underline">
-                        Abrir vídeo em nova aba
-                      </a>
-                    </li>
+                <h5 class="text-gold-300">Avaliação do capítulo</h5>
+                <p class="mt-1 text-xs text-slate-400">10 questões. Aprovação mínima: 80% (8 acertos).</p>
+                <div class="mt-3 max-h-80 space-y-3 overflow-auto pr-1">
+                  @for (question of chapterQuiz; track question.prompt; let qIdx = $index) {
+                    <div class="rounded-lg border border-gold-500/15 p-2">
+                      <p class="text-xs text-slate-200">{{ qIdx + 1 }}. {{ question.prompt }}</p>
+                      <div class="mt-2 space-y-1">
+                        @for (option of question.options; track option; let optIdx = $index) {
+                          <label class="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+                            <input
+                              type="radio"
+                              [name]="'q-' + qIdx"
+                              [checked]="selectedAnswer(qIdx) === optIdx"
+                              (change)="setQuizAnswer(qIdx, optIdx)"
+                            />
+                            {{ option }}
+                          </label>
+                        }
+                      </div>
+                    </div>
                   }
-                  <li>Material em markdown na descrição</li>
-                </ul>
+                </div>
+                <button
+                  type="button"
+                  (click)="submitQuiz()"
+                  [disabled]="!selectedCourseId()"
+                  class="mt-3 w-full rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+                >
+                  Finalizar avaliação
+                </button>
+                @if (quizResult(); as result) {
+                  <p class="mt-2 text-xs" [ngClass]="result.passed ? 'text-emerald-300' : 'text-red-300'">
+                    Resultado: {{ result.score }}/10
+                  </p>
+                }
+                @if (quizMessage()) {
+                  <p class="mt-1 text-xs text-slate-300">{{ quizMessage() }}</p>
+                }
               </article>
             </div>
           } @else {
@@ -253,6 +270,62 @@ export class LessonPlayerComponent implements OnInit {
   readonly selectedCourseId = signal<number | null>(null);
   readonly selectedLessonId = signal<number | null>(null);
   readonly videoUploading = signal(false);
+  readonly quizAnswers = signal<Record<number, number[]>>({});
+  readonly quizResult = signal<{ score: number; passed: boolean } | null>(null);
+  readonly quizMessage = signal<string | null>(null);
+
+  readonly chapterQuiz: { prompt: string; options: string[]; correctIndex: number }[] = [
+    {
+      prompt: 'Qual é a melhor atitude ao iniciar o estudo de um novo capítulo?',
+      options: ['Ignorar o objetivo', 'Definir objetivo claro', 'Estudar sem foco', 'Pular exemplos'],
+      correctIndex: 1,
+    },
+    {
+      prompt: 'Para fixar o conteúdo, a prática recomendada é:',
+      options: ['Apenas assistir', 'Repetir sem entender', 'Aplicar em exercícios', 'Memorizar sem contexto'],
+      correctIndex: 2,
+    },
+    {
+      prompt: 'Ao encontrar dificuldade em um tópico, o ideal é:',
+      options: ['Abandonar o capítulo', 'Rever o conceito-base', 'Ignorar e avançar', 'Trocar de curso'],
+      correctIndex: 1,
+    },
+    {
+      prompt: 'Qual estratégia melhora retenção de longo prazo?',
+      options: ['Revisão espaçada', 'Estudo único e longo', 'Sem anotações', 'Somente leitura passiva'],
+      correctIndex: 0,
+    },
+    {
+      prompt: 'No contexto do capítulo, exemplos práticos servem para:',
+      options: ['Confundir o aluno', 'Substituir teoria', 'Conectar teoria e aplicação', 'Aumentar tempo sem ganho'],
+      correctIndex: 2,
+    },
+    {
+      prompt: 'Ao final de cada seção, o aluno deve principalmente:',
+      options: ['Checar entendimento', 'Pular para prova', 'Encerrar sem revisão', 'Copiar tudo sem filtrar'],
+      correctIndex: 0,
+    },
+    {
+      prompt: 'Um bom indicador de domínio do capítulo é:',
+      options: ['Saber explicar o conteúdo', 'Apenas reconhecer termos', 'Ter visto o vídeo uma vez', 'Não errar nunca'],
+      correctIndex: 0,
+    },
+    {
+      prompt: 'Quando revisar erro em exercício, o foco correto é:',
+      options: ['Só ver o gabarito', 'Entender causa do erro', 'Refazer sem analisar', 'Ignorar o resultado'],
+      correctIndex: 1,
+    },
+    {
+      prompt: 'Para evoluir no capítulo, feedback deve ser:',
+      options: ['Específico e acionável', 'Genérico e vago', 'Raro e tardio', 'Sem relação com conteúdo'],
+      correctIndex: 0,
+    },
+    {
+      prompt: 'A melhor forma de concluir o capítulo é:',
+      options: ['Passar para o próximo sem validar', 'Atingir desempenho mínimo na avaliação', 'Assistir novamente sem prática', 'Parar no meio do conteúdo'],
+      correctIndex: 1,
+    },
+  ];
 
   newLesson = {
     module_name: '',
@@ -336,6 +409,8 @@ export class LessonPlayerComponent implements OnInit {
 
   selectLesson(lessonId: number): void {
     this.selectedLessonId.set(lessonId);
+    this.quizResult.set(null);
+    this.quizMessage.set(null);
   }
 
   hasPlayableVideo(url: string): boolean {
@@ -354,16 +429,52 @@ export class LessonPlayerComponent implements OnInit {
     return this.data.activeCourses().find((item) => item.courseId === courseId)?.progressPercentage ?? null;
   }
 
-  markProgress(): void {
-    const courseId = this.selectedCourseId();
-    if (!courseId) return;
-    const current = this.courseProgress() ?? 0;
-    void this.data.updateProgress(courseId, current + 10);
-  }
-
   onVideoEnded(): void {
     if (!this.auth.isStudent()) return;
-    this.markProgress();
+    this.quizMessage.set('Para atingir 100% deste capítulo, conclua a avaliação com no mínimo 80%.');
+  }
+
+  setQuizAnswer(questionIndex: number, optionIndex: number): void {
+    const lessonId = this.selectedLessonId();
+    if (!lessonId) return;
+    const current = this.quizAnswers();
+    const lessonAnswers = [...(current[lessonId] ?? Array(10).fill(-1))];
+    lessonAnswers[questionIndex] = optionIndex;
+    this.quizAnswers.set({ ...current, [lessonId]: lessonAnswers });
+  }
+
+  selectedAnswer(questionIndex: number): number {
+    const lessonId = this.selectedLessonId();
+    if (!lessonId) return -1;
+    return this.quizAnswers()[lessonId]?.[questionIndex] ?? -1;
+  }
+
+  async submitQuiz(): Promise<void> {
+    const lessonId = this.selectedLessonId();
+    const courseId = this.selectedCourseId();
+    if (!lessonId || !courseId) return;
+
+    const answers = this.quizAnswers()[lessonId] ?? [];
+    if (answers.length < this.chapterQuiz.length || answers.some((answer) => answer < 0)) {
+      this.quizMessage.set('Responda as 10 questões antes de finalizar a avaliação.');
+      return;
+    }
+
+    const score = this.chapterQuiz.reduce((acc, question, index) => {
+      return acc + (answers[index] === question.correctIndex ? 1 : 0);
+    }, 0);
+    const passed = score >= 8;
+    this.quizResult.set({ score, passed });
+
+    if (passed) {
+      await this.data.updateProgress(courseId, 100);
+      this.quizMessage.set('Aprovado! Capítulo concluído com 100% de progresso.');
+      return;
+    }
+
+    const current = this.courseProgress() ?? 0;
+    await this.data.updateProgress(courseId, Math.min(current, 90));
+    this.quizMessage.set('Você precisa de 80% (8/10). Revise o capítulo e tente novamente.');
   }
 
   async onNewLessonVideo(event: Event): Promise<void> {
