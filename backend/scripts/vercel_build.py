@@ -52,7 +52,9 @@ def ensure_toolchain() -> None:
                 "ou adicione .nvmrc na raiz.",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            # Fail-open: se não tiver Node na Vercel, ainda assim podemos
+            # continuar com /public committado (skip já cobre o caso típico).
+            return
 
 
 def clean_stale_outputs() -> None:
