@@ -15,14 +15,9 @@ dist/
 .env*.local
 .vercel-spa-staging/
 
-public/*
-!public/.gitkeep
-!public/favicon.ico
+# SPA: gere com `python backend/scripts/vercel_build.py` e commite public/ se o build na Vercel falhar
 backend/public/*
 !backend/public/.gitkeep
-backend/app/public/*
-!backend/app/public/.gitkeep
-!backend/app/public/favicon.ico
 
 backend/uploads/*
 !backend/uploads/.gitkeep

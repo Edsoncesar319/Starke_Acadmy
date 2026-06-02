@@ -75,6 +75,8 @@ vercel deploy --prod
 
 O build roda `backend/scripts/vercel_build.py` (Angular → `public/` + FastAPI em `/api`).
 
+Se a home mostrar JSON em vez do portal, o build não chegou na Vercel. Rode localmente `python backend/scripts/vercel_build.py`, commite as pastas `public/` e `backend/app/public/`, e faça push.
+
 Se o deploy falhar com exit code 1, confira nos logs da Vercel:
 - Node.js 20 ativo no projeto (ou `.nvmrc` na raiz)
 - `frontend/package-lock.json` commitado junto com `package.json`

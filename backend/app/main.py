@@ -577,6 +577,7 @@ def _resolve_public_dir() -> Path | None:
         app_dir / "public",
         repo_root / "public",
         backend_root / "public",
+        backend_root / "app" / "public",
     ]
     if task_root.is_dir():
         candidates.extend(
@@ -669,10 +670,5 @@ else:
         )
 
 
-def _vercel_api_only() -> bool:
-    return os.environ.get("VERCEL") == "1"
-
-
-# Na Vercel: serviço backend só em /api (rotas sem prefixo /api no app).
-# Local: portal composto (SPA + API em /api).
-app = elite_api if _vercel_api_only() else application
+# Portal + API no mesmo app (Vercel routePrefix / e dev local na :8000).
+app = application
