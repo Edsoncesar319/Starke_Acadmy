@@ -37,6 +37,7 @@ export interface Lesson {
   title: string;
   videoUrl: string;
   contentMd: string;
+  pdfUrl: string | null;
 }
 
 export interface StudentMessage {
@@ -275,6 +276,7 @@ export class PortalDataService {
           title: lesson.title,
           videoUrl: lesson.video_url,
           contentMd: lesson.content_md,
+          pdfUrl: lesson.pdf_url ?? null,
         })),
       );
     } catch {

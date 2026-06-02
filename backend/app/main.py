@@ -24,6 +24,7 @@ from .storage import (
     max_video_bytes,
     on_vercel,
     upload_avatar_or_course_image,
+    upload_lesson_pdf,
     upload_lesson_video,
 )
 from .models import Course, Enrollment, Lesson, StudentMessage, Ticket, User
@@ -61,6 +62,8 @@ ALLOWED_VIDEO_MIME_TYPES = {
     "application/octet-stream",
     "binary/octet-stream",
 }
+ALLOWED_PDF_EXTENSIONS = {".pdf"}
+ALLOWED_PDF_MIME_TYPES = {"application/pdf"}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -220,6 +223,27 @@ async def _save_uploaded_video(file: UploadFile) -> str:
     )
 
 
+async def _save_uploaded_pdf(file: UploadFile) -> str:
+    extension = Path(file.filename or "").suffix.lower()
+    if extension not in ALLOWED_PDF_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Invalid PDF format. Use .pdf.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type and content_type not in ALLOWED_PDF_MIME_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipo de arquivo não suportado ({content_type}). Use PDF.")
+
+    content = await file.read()
+    max_bytes = 4 * 1024 * 1024 if on_vercel() else 25 * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=400, detail=f"PDF too large (max {max_bytes // (1024 * 1024)}MB)")
+
+    return await upload_lesson_pdf(
+        content,
+        extension,
+        file.content_type or "application/pdf",
+    )
+
+
 @app.post("/me/upload-avatar")
 async def upload_my_avatar(
     file: UploadFile = File(...),
@@ -252,6 +276,7 @@ def list_course_lessons(course_id: int, db: Session = Depends(get_db)) -> list[d
             "title": lesson.title,
             "video_url": lesson.video_url,
             "content_md": lesson.content_md,
+            "pdf_url": lesson.pdf_url,
         }
         for lesson in lessons
     ]
@@ -517,6 +542,7 @@ def admin_create_lesson(
         title=payload.title.strip(),
         video_url=payload.video_url.strip(),
         content_md=payload.content_md.strip(),
+        pdf_url=(payload.pdf_url or "").strip() or None,
     )
     db.add(lesson)
     db.commit()
@@ -539,6 +565,7 @@ def admin_update_lesson(
     lesson.title = payload.title.strip()
     lesson.video_url = payload.video_url.strip()
     lesson.content_md = payload.content_md.strip()
+    lesson.pdf_url = (payload.pdf_url or "").strip() or None
     db.commit()
     db.refresh(lesson)
     return lesson
@@ -570,6 +597,15 @@ async def admin_upload_lesson_video(
 ):
     video_url = await _save_uploaded_video(file)
     return {"video_url": video_url}
+
+
+@app.post("/admin/lessons/upload-pdf")
+async def admin_upload_lesson_pdf(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_content_manager),
+):
+    pdf_url = await _save_uploaded_pdf(file)
+    return {"pdf_url": pdf_url}
 
 
 # Composite app: API under /api; SPA/static em public/ (CDN + StaticFiles).

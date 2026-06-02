@@ -57,6 +57,7 @@ class Lesson(Base):
     title: Mapped[str] = mapped_column(String(180), nullable=False)
     video_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     course = relationship("Course", back_populates="lessons")
 

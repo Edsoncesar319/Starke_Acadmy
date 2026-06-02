@@ -80,6 +80,17 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                 @if (newLesson.video_url) {
                   <p class="truncate text-xs text-gold-300">Vídeo: {{ newLesson.video_url }}</p>
                 }
+                <label class="block text-xs text-slate-400">Upload PDF do capítulo</label>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  (change)="onNewLessonPdf($event)"
+                  [disabled]="videoUploading()"
+                  class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gold-500/20 file:px-2 file:py-1 file:text-gold-300"
+                />
+                @if (newLesson.pdf_url) {
+                  <p class="truncate text-xs text-gold-300">PDF: {{ newLesson.pdf_url }}</p>
+                }
                 <button
                   type="submit"
                   [disabled]="!selectedCourseId || videoUploading()"
@@ -119,8 +130,18 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                     [disabled]="videoUploading()"
                     class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1 text-xs"
                   />
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    (change)="onLessonPdfUpload(lesson, $event)"
+                    [disabled]="videoUploading()"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1 text-xs"
+                  />
                   @if (lesson.video_url) {
                     <p class="truncate text-xs text-slate-400">{{ lesson.video_url }}</p>
+                  }
+                  @if (lesson.pdf_url) {
+                    <p class="truncate text-xs text-slate-400">{{ lesson.pdf_url }}</p>
                   }
                   <div class="flex gap-2">
                     <button type="submit" class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300">
@@ -204,13 +225,16 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                 <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
                   {{ lesson.contentMd || 'Sem descrição para esta aula.' }}
                 </p>
-                <button
-                  type="button"
-                  (click)="downloadLessonPdf(lesson)"
-                  class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10"
-                >
-                  Baixar conteúdo (PDF)
-                </button>
+                @if (lesson.pdfUrl) {
+                  <a
+                    [href]="lesson.pdfUrl"
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-4 inline-block rounded-lg border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10"
+                  >
+                    Baixar conteúdo (PDF)
+                  </a>
+                }
                 @if (courseProgress() !== null) {
                   <p class="mt-2 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
                 }
@@ -339,6 +363,7 @@ export class LessonPlayerComponent implements OnInit {
     title: '',
     content_md: '',
     video_url: '',
+    pdf_url: '',
   };
 
   readonly lessons = computed<Lesson[]>(() => {
@@ -484,45 +509,6 @@ export class LessonPlayerComponent implements OnInit {
     this.quizMessage.set('Você precisa de 80% (8/10). Revise o capítulo e tente novamente.');
   }
 
-  async downloadLessonPdf(lesson: Lesson): Promise<void> {
-    const { jsPDF } = await import('jspdf');
-    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-
-    const title = lesson.title?.trim() || 'Conteudo-da-aula';
-    const moduleName = lesson.moduleName?.trim() || 'Modulo';
-    const content = lesson.contentMd?.trim() || 'Sem descricao para esta aula.';
-    const normalized = content.replace(/\r\n/g, '\n');
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(16);
-    pdf.text(title, 40, 50);
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(11);
-    pdf.text(`Modulo: ${moduleName}`, 40, 72);
-
-    const lines = pdf.splitTextToSize(normalized, 515);
-    let y = 98;
-    const lineHeight = 16;
-    lines.forEach((line: string) => {
-      if (y > 790) {
-        pdf.addPage();
-        y = 50;
-      }
-      pdf.text(line, 40, y);
-      y += lineHeight;
-    });
-
-    const safeName = title
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9-_ ]/g, '')
-      .trim()
-      .replace(/\s+/g, '-')
-      .toLowerCase();
-    pdf.save(`${safeName || 'conteudo-aula'}.pdf`);
-  }
-
   async onNewLessonVideo(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
@@ -552,6 +538,35 @@ export class LessonPlayerComponent implements OnInit {
     }
   }
 
+  async onNewLessonPdf(event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      this.newLesson.pdf_url = await this.admin.uploadLessonPdf(file);
+    } catch {
+      // handled by service
+    } finally {
+      this.videoUploading.set(false);
+      (event.target as HTMLInputElement).value = '';
+    }
+  }
+
+  async onLessonPdfUpload(lesson: AdminLesson, event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      lesson.pdf_url = await this.admin.uploadLessonPdf(file);
+      await this.admin.updateLesson(lesson);
+    } catch {
+      // handled by service
+    } finally {
+      this.videoUploading.set(false);
+      (event.target as HTMLInputElement).value = '';
+    }
+  }
+
   async createLesson(): Promise<void> {
     const courseId = this.selectedCourseId();
     if (!courseId) return;
@@ -561,8 +576,9 @@ export class LessonPlayerComponent implements OnInit {
       title: this.newLesson.title,
       content_md: this.newLesson.content_md,
       video_url: this.newLesson.video_url,
+      pdf_url: this.newLesson.pdf_url || null,
     });
-    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '' };
+    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
   }
 
   async saveAdminLesson(lesson: AdminLesson): Promise<void> {
@@ -583,6 +599,7 @@ export class LessonPlayerComponent implements OnInit {
       title: lesson.title,
       videoUrl: lesson.video_url,
       contentMd: lesson.content_md,
+      pdfUrl: lesson.pdf_url,
     };
   }
 }

@@ -80,6 +80,7 @@ class LessonOut(BaseModel):
     title: str
     video_url: str
     content_md: str
+    pdf_url: str | None = None
 
 
 class LessonCreate(BaseModel):
@@ -88,6 +89,7 @@ class LessonCreate(BaseModel):
     title: str
     video_url: str = ""
     content_md: str = ""
+    pdf_url: str | None = None
 
 
 class LessonUpdate(BaseModel):
@@ -95,6 +97,7 @@ class LessonUpdate(BaseModel):
     title: str
     video_url: str
     content_md: str
+    pdf_url: str | None = None
 
 
 class EnrollmentOut(BaseModel):

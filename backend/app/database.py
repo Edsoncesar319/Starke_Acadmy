@@ -67,10 +67,21 @@ def ensure_schema_updates() -> None:
         migrations.append(("is_instructor", default_false))
 
     if not migrations:
-        return
+        pass
 
     with engine.begin() as connection:
         for column_name, default in migrations:
             connection.execute(
                 text(f"ALTER TABLE users ADD COLUMN {column_name} BOOLEAN DEFAULT {default}")
             )
+
+    # Lessons table migrations
+    if "lessons" not in inspector.get_table_names():
+        return
+
+    lesson_columns = {col["name"] for col in inspector.get_columns("lessons")}
+    if "pdf_url" in lesson_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE lessons ADD COLUMN pdf_url VARCHAR(1024)"))

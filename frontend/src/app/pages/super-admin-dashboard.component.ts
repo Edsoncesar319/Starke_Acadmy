@@ -154,6 +154,17 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
             @if (newLesson.video_url) {
               <p class="truncate text-xs text-gold-300">Vídeo anexado</p>
             }
+            <label class="block text-xs text-slate-400">Upload PDF do capítulo</label>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              (change)="onNewLessonPdf($event)"
+              [disabled]="videoUploading()"
+              class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gold-500/20 file:px-2 file:py-1 file:text-gold-300"
+            />
+            @if (newLesson.pdf_url) {
+              <p class="truncate text-xs text-gold-300">PDF anexado</p>
+            }
             @if (videoUploading()) {
               <p class="text-xs text-gold-300">Enviando vídeo...</p>
             }
@@ -217,6 +228,24 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                       class="block truncate text-xs text-gold-300 hover:underline"
                     >
                       Ver vídeo atual
+                    </a>
+                  }
+                  <label class="block text-xs text-slate-400">Substituir PDF</label>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    (change)="onLessonPdfUpload(lesson, $event)"
+                    [disabled]="videoUploading()"
+                    class="w-full rounded border border-gold-500/20 bg-obsidian-900 px-2 py-1 text-xs"
+                  />
+                  @if (lesson.pdf_url) {
+                    <a
+                      [href]="lesson.pdf_url"
+                      target="_blank"
+                      rel="noopener"
+                      class="block truncate text-xs text-gold-300 hover:underline"
+                    >
+                      Ver PDF atual
                     </a>
                   }
                   <div class="flex flex-wrap gap-2 pt-1">
@@ -469,6 +498,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     title: '',
     content_md: '',
     video_url: '',
+    pdf_url: '',
   };
   studentProfile = {
     name: '',
@@ -586,8 +616,9 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
       title: this.newLesson.title,
       content_md: this.newLesson.content_md,
       video_url: this.newLesson.video_url,
+      pdf_url: this.newLesson.pdf_url || null,
     });
-    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '' };
+    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
   }
 
   async saveLesson(lesson: AdminLesson): Promise<void> {
@@ -622,6 +653,21 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  async onNewLessonPdf(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      this.newLesson.pdf_url = await this.admin.uploadLessonPdf(file);
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.videoUploading.set(false);
+      input.value = '';
+    }
+  }
+
   async onLessonVideoUpload(lesson: AdminLesson, event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -629,6 +675,22 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     this.videoUploading.set(true);
     try {
       lesson.video_url = await this.admin.uploadLessonVideo(file);
+      await this.admin.updateLesson(lesson);
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.videoUploading.set(false);
+      input.value = '';
+    }
+  }
+
+  async onLessonPdfUpload(lesson: AdminLesson, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.videoUploading.set(true);
+    try {
+      lesson.pdf_url = await this.admin.uploadLessonPdf(file);
       await this.admin.updateLesson(lesson);
     } catch {
       // handled by AdminService

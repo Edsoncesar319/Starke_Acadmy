@@ -52,6 +52,7 @@ export interface AdminLesson {
   title: string;
   video_url: string;
   content_md: string;
+  pdf_url: string | null;
 }
 
 export interface AdminLessonCreate {
@@ -60,6 +61,7 @@ export interface AdminLessonCreate {
   title: string;
   video_url: string;
   content_md: string;
+  pdf_url: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -221,6 +223,7 @@ export class AdminService {
         title: lesson.title.trim(),
         video_url: lesson.video_url.trim(),
         content_md: lesson.content_md.trim(),
+        pdf_url: lesson.pdf_url?.trim() || null,
       }),
     );
     this.status.set(`Aula "${lesson.title}" atualizada.`);
@@ -253,6 +256,37 @@ export class AdminService {
       );
       this.status.set('Vídeo da aula enviado com sucesso.');
       return response.video_url;
+    } catch (err) {
+      const message = this.extractUploadError(err);
+      this.error.set(message);
+      throw new Error(message);
+    }
+  }
+
+  async uploadLessonPdf(file: File): Promise<string> {
+    this.error.set(null);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      const message = 'Formato inválido. Use arquivo PDF.';
+      this.error.set(message);
+      throw new Error(message);
+    }
+
+    const maxBytes = 25 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      const message = 'PDF muito grande. Máximo 25 MB.';
+      this.error.set(message);
+      throw new Error(message);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ pdf_url: string }>(`${this.apiUrl}/admin/lessons/upload-pdf`, formData),
+      );
+      this.status.set('PDF da aula enviado com sucesso.');
+      return response.pdf_url;
     } catch (err) {
       const message = this.extractUploadError(err);
       this.error.set(message);

@@ -84,3 +84,14 @@ async def upload_lesson_video(content: bytes, extension: str, content_type: str)
         local_dir=VIDEO_UPLOAD_DIR,
         public_url_path="/uploads/videos",
     )
+
+
+async def upload_lesson_pdf(content: bytes, extension: str, content_type: str) -> str:
+    blob_path = f"lesson-pdfs/{uuid4().hex}{extension}"
+    return await store_public_file(
+        content=content,
+        blob_path=blob_path,
+        content_type=content_type,
+        local_dir=UPLOAD_DIR,
+        public_url_path="/uploads",
+    )
