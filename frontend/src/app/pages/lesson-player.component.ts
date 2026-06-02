@@ -204,8 +204,15 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                 <p class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
                   {{ lesson.contentMd || 'Sem descrição para esta aula.' }}
                 </p>
+                <button
+                  type="button"
+                  (click)="downloadLessonPdf(lesson)"
+                  class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10"
+                >
+                  Baixar conteúdo (PDF)
+                </button>
                 @if (courseProgress() !== null) {
-                  <p class="mt-4 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
+                  <p class="mt-2 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
                 }
               </article>
               <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
@@ -475,6 +482,45 @@ export class LessonPlayerComponent implements OnInit {
     const current = this.courseProgress() ?? 0;
     await this.data.updateProgress(courseId, Math.min(current, 90));
     this.quizMessage.set('Você precisa de 80% (8/10). Revise o capítulo e tente novamente.');
+  }
+
+  async downloadLessonPdf(lesson: Lesson): Promise<void> {
+    const { jsPDF } = await import('jspdf');
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+
+    const title = lesson.title?.trim() || 'Conteudo-da-aula';
+    const moduleName = lesson.moduleName?.trim() || 'Modulo';
+    const content = lesson.contentMd?.trim() || 'Sem descricao para esta aula.';
+    const normalized = content.replace(/\r\n/g, '\n');
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(16);
+    pdf.text(title, 40, 50);
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    pdf.text(`Modulo: ${moduleName}`, 40, 72);
+
+    const lines = pdf.splitTextToSize(normalized, 515);
+    let y = 98;
+    const lineHeight = 16;
+    lines.forEach((line: string) => {
+      if (y > 790) {
+        pdf.addPage();
+        y = 50;
+      }
+      pdf.text(line, 40, y);
+      y += lineHeight;
+    });
+
+    const safeName = title
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9-_ ]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .toLowerCase();
+    pdf.save(`${safeName || 'conteudo-aula'}.pdf`);
   }
 
   async onNewLessonVideo(event: Event): Promise<void> {
