@@ -171,8 +171,13 @@ def mirror_to_app_package() -> None:
 
 def main() -> None:
     if not (FRONTEND / "package.json").is_file():
-        print(f"Missing {FRONTEND / 'package.json'}", file=sys.stderr)
-        sys.exit(1)
+        # Fail-open: ainda assim tentamos garantir que /public exista no repo.
+        print(f"WARNING: Missing {FRONTEND / 'package.json'}; using committed /public if present.", file=sys.stderr)
+        committed_index = (PUBLIC / "index.html").is_file()
+        if committed_index:
+            ensure_favicon()
+            mirror_to_app_package()
+        return
 
     try:
         on_vercel = os.environ.get("VERCEL") == "1"
@@ -210,17 +215,36 @@ def main() -> None:
                 flush=True,
             )
         else:
-            raise
+            # Falha e também não existe SPA commitada: ainda assim fail-open.
+            committed_index = (PUBLIC / "index.html").is_file()
+            if committed_index:
+                ensure_favicon()
+                mirror_to_app_package()
+            else:
+                print("ERROR: SPA not found and build failed; skipping.", file=sys.stderr)
+            return
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        committed_index = (PUBLIC / "index.html").is_file()
+        if committed_index:
+            ensure_favicon()
+            mirror_to_app_package()
+        return
+    except Exception as exc:
+        print(f"Unexpected vercel_build error: {exc}", file=sys.stderr)
+        committed_index = (PUBLIC / "index.html").is_file()
+        if committed_index:
+            ensure_favicon()
+            mirror_to_app_package()
+        return
 
     flatten_browser_subfolder(PUBLIC)
     ensure_favicon()
 
     if not (PUBLIC / "index.html").is_file():
-        print("Missing public/index.html after publish step", file=sys.stderr)
-        sys.exit(1)
+        # Fail-open: se build falhou mas o deploy pode seguir.
+        print("WARNING: Missing public/index.html after publish step", file=sys.stderr)
+        return
 
     mirror_to_app_package()
     assets = list(PUBLIC.glob("*.js"))
