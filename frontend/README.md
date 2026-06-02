@@ -63,7 +63,7 @@ cd frontend
 npm run build
 ```
 
-Saída em `backend/public/` (empacotada com o FastAPI na Vercel).
+Saída em `public/` na raiz do repositório (CDN da Vercel). Cópia espelhada em `backend/app/public/`.
 
 ## Deploy manual
 
@@ -73,4 +73,9 @@ Na raiz do repositório:
 vercel deploy --prod
 ```
 
-O build roda `backend/scripts/vercel_build.py` (Angular → `backend/public/` + FastAPI).
+O build roda `backend/scripts/vercel_build.py` (Angular → `public/` + FastAPI em `/api`).
+
+Se o deploy falhar com exit code 1, confira nos logs da Vercel:
+- Node.js 20 ativo no projeto (ou `.nvmrc` na raiz)
+- `frontend/package-lock.json` commitado junto com `package.json`
+- Erros do `ng build` (TypeScript / memória)

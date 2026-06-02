@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -564,17 +565,22 @@ async def admin_upload_lesson_video(
     return {"video_url": video_url}
 
 
-# Composite app: API under /api, Angular static files at /
-def _resolve_public_dir() -> Path:
-    backend_root = Path(__file__).resolve().parents[1]
+# Composite app: API under /api; SPA is served from /public on Vercel CDN.
+def _on_vercel() -> bool:
+    return bool(os.environ.get("VERCEL"))
+
+
+def _resolve_public_dir() -> Path | None:
+    app_dir = Path(__file__).resolve().parent
+    backend_root = app_dir.parent
     repo_root = backend_root.parent
-    for public in (backend_root / "public", repo_root / "public"):
+    for public in (app_dir / "public", repo_root / "public", backend_root / "public"):
         if (public / "index.html").is_file():
             return public
         nested = public / "browser"
         if (nested / "index.html").is_file():
             return nested
-    return backend_root / "public"
+    return None
 
 
 PUBLIC_DIR = _resolve_public_dir()
@@ -582,20 +588,20 @@ api = app
 application = FastAPI(title="Starke Academy Portal")
 application.mount("/api", api)
 
-_spa_index = PUBLIC_DIR / "index.html"
-if _spa_index.is_file():
+# Em produção na Vercel, arquivos em /public são servidos pelo CDN (não montar aqui).
+if PUBLIC_DIR and not _on_vercel():
     application.mount(
         "/",
         StaticFiles(directory=str(PUBLIC_DIR), html=True),
         name="spa",
     )
-else:
+elif not _on_vercel():
 
     @application.get("/")
     async def serve_portal_placeholder():
         return {
             "status": "ok",
-            "message": "Build the frontend (npm run build) into backend/public",
+            "message": "Execute: cd frontend && npm run build (gera /public na raiz)",
         }
 
 

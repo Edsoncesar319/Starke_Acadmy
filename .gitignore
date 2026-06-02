@@ -19,6 +19,8 @@ public/*
 !public/.gitkeep
 backend/public/*
 !backend/public/.gitkeep
+backend/app/public/*
+!backend/app/public/.gitkeep
 
 backend/uploads/*
 !backend/uploads/.gitkeep
