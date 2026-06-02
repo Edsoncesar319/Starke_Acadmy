@@ -49,6 +49,31 @@ export interface StudentMessage {
   createdAt: string;
 }
 
+export interface PixCheckout {
+  purchase: {
+    id: number;
+    status: string;
+  };
+  provider: string;
+  provider_reference: string;
+  qr_code_base64: string;
+  qr_code: string;
+  ticket_url: string | null;
+}
+
+export interface Purchase {
+  id: number;
+  user_id: number;
+  course_id: number;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  provider: string;
+  provider_reference: string | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PortalDataService {
   private readonly http = inject(HttpClient);
@@ -68,6 +93,10 @@ export class PortalDataService {
   readonly messages = signal<StudentMessage[]>([]);
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly pixCheckout = signal<PixCheckout | null>(null);
+  readonly pixModalOpen = signal(false);
+  readonly pixStatus = signal<string | null>(null);
+  readonly purchases = signal<Purchase[]>([]);
 
   readonly activeCourses = computed(() =>
     this.enrollments().map((enrollment) => {
@@ -150,8 +179,68 @@ export class PortalDataService {
         ),
       );
       await this.refreshPortalData();
-    } catch {
+    } catch (err) {
+      // Se o backend exigir pagamento (402), abrimos checkout PIX.
+      const status = (err as any)?.status;
+      if (status === 402) {
+        await this.startPixCheckout(courseId);
+        return;
+      }
       this.error.set('Enrollment failed.');
+    }
+  }
+
+  async startPixCheckout(courseId: number): Promise<void> {
+    this.error.set(null);
+    this.pixStatus.set('Gerando PIX...');
+    try {
+      const checkout = await firstValueFrom(
+        this.http.post<PixCheckout>(`${this.apiUrl}/checkout/pix`, { course_id: courseId }),
+      );
+      this.pixCheckout.set(checkout);
+      this.pixStatus.set('Aguardando pagamento...');
+    } catch {
+      this.error.set('Não foi possível gerar o PIX. Tente novamente.');
+      this.pixCheckout.set(null);
+      this.pixStatus.set(null);
+    }
+  }
+
+  async pollPixStatus(purchaseId: number): Promise<void> {
+    // Poll simples a cada 3s por até ~2 minutos.
+    const start = Date.now();
+    while (Date.now() - start < 120_000 && this.pixModalOpen()) {
+      try {
+        const purchase = await firstValueFrom(
+          this.http.get<{ id: number; status: string; course_id: number }>(`${this.apiUrl}/purchases/${purchaseId}`),
+        );
+        if (purchase.status === 'paid') {
+          this.pixStatus.set('Pagamento aprovado! Finalizando matrícula...');
+          this.pixModalOpen.set(false);
+          this.pixCheckout.set(null);
+          this.pixStatus.set(null);
+          // Tenta matricular novamente
+          await this.enrollInCourse(purchase.course_id);
+          return;
+        }
+      } catch {
+        // ignora erros temporários
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    if (this.pixModalOpen()) {
+      this.pixStatus.set('Pagamento não confirmado ainda. Você pode aguardar e tentar novamente.');
+    }
+  }
+
+  async refreshPurchases(): Promise<void> {
+    try {
+      const purchases = await firstValueFrom(
+        this.http.get<Purchase[]>(`${this.apiUrl}/purchases`),
+      );
+      this.purchases.set(purchases);
+    } catch {
+      this.error.set('Não foi possível carregar seus pagamentos.');
     }
   }
 
@@ -301,6 +390,10 @@ export class PortalDataService {
     this.enrollments.set([]);
     this.lessons.set([]);
     this.messages.set([]);
+    this.purchases.set([]);
+    this.pixCheckout.set(null);
+    this.pixModalOpen.set(false);
+    this.pixStatus.set(null);
     this.error.set(null);
   }
 }

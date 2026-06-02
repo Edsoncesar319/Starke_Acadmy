@@ -80,8 +80,6 @@ def ensure_schema_updates() -> None:
         return
 
     lesson_columns = {col["name"] for col in inspector.get_columns("lessons")}
-    if "pdf_url" in lesson_columns:
-        return
-
-    with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE lessons ADD COLUMN pdf_url VARCHAR(1024)"))
+    if "pdf_url" not in lesson_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE lessons ADD COLUMN pdf_url VARCHAR(1024)"))

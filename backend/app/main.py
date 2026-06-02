@@ -1,13 +1,15 @@
 import os
+import json
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from uuid import uuid4
 
 from .auth import (
     create_access_token,
@@ -27,17 +29,21 @@ from .storage import (
     upload_lesson_pdf,
     upload_lesson_video,
 )
-from .models import Course, Enrollment, Lesson, StudentMessage, Ticket, User
+from .models import Course, Enrollment, Lesson, PaymentEvent, Purchase, StudentMessage, Ticket, User
 from .schemas import (
     CourseCreate,
     CourseOut,
     CourseUpdate,
     EnrollmentCreate,
     EnrollmentOut,
+    CheckoutCreate,
+    CheckoutOut,
+    PixCheckoutOut,
     LessonCreate,
     LessonOut,
     LessonUpdate,
     ProgressUpdate,
+    PurchaseOut,
     StudentMessageCreate,
     StudentMessageOut,
     TicketCreate,
@@ -265,6 +271,214 @@ def list_courses(db: Session = Depends(get_db)):
     return db.query(Course).all()
 
 
+def _to_cents(amount: float) -> int:
+    return max(0, int(round((amount or 0) * 100)))
+
+
+def _mp_sdk():
+    token = os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN")
+    if not token:
+        raise HTTPException(status_code=500, detail="Missing MERCADOPAGO_ACCESS_TOKEN")
+    import mercadopago  # type: ignore
+
+    return mercadopago.SDK(token)
+
+
+@app.post("/checkout/pix", response_model=PixCheckoutOut)
+def create_pix_checkout(
+    payload: CheckoutCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    course = db.query(Course).filter(Course.id == payload.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    purchase = Purchase(
+        user_id=current_user.id,
+        course_id=course.id,
+        amount_cents=_to_cents(course.price),
+        currency="BRL",
+        status="pending",
+        provider="mercadopago",
+    )
+    db.add(purchase)
+    db.commit()
+    db.refresh(purchase)
+
+    sdk = _mp_sdk()
+    payment_data = {
+        "transaction_amount": float(purchase.amount_cents) / 100.0,
+        "description": f"Curso: {course.title}",
+        "payment_method_id": "pix",
+        "external_reference": str(purchase.id),
+        "payer": {"email": current_user.email},
+    }
+
+    # Idempotência evita cobranças duplicadas em retry.
+    try:
+        from mercadopago.config import RequestOptions  # type: ignore
+
+        request_options = RequestOptions()
+        request_options.custom_headers = {"x-idempotency-key": uuid4().hex}
+        result = sdk.payment().create(payment_data, request_options)
+    except Exception:
+        result = sdk.payment().create(payment_data)
+
+    payment = result.get("response") or {}
+    mp_payment_id = str(payment.get("id") or "")
+    purchase.provider_reference = mp_payment_id or None
+    db.commit()
+    db.refresh(purchase)
+
+    tx = (
+        (payment.get("point_of_interaction") or {})
+        .get("transaction_data") or {}
+    )
+    qr_code_base64 = str(tx.get("qr_code_base64") or "")
+    qr_code = str(tx.get("qr_code") or "")
+    ticket_url = tx.get("ticket_url")
+
+    if not qr_code_base64 or not qr_code:
+        raise HTTPException(status_code=500, detail="Mercado Pago did not return PIX data")
+
+    return {
+        "purchase": purchase,
+        "provider": "mercadopago",
+        "provider_reference": mp_payment_id,
+        "qr_code_base64": qr_code_base64,
+        "qr_code": qr_code,
+        "ticket_url": ticket_url,
+    }
+
+@app.post("/checkout", response_model=CheckoutOut)
+def create_checkout(
+    payload: CheckoutCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Estrutura base de pagamento.
+
+    Hoje cria uma Purchase "pending" e retorna um checkout_url placeholder.
+    Depois, você pluga Stripe/MercadoPago e preenche provider_reference/checkout_url.
+    """
+    course = db.query(Course).filter(Course.id == payload.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    purchase = Purchase(
+        user_id=current_user.id,
+        course_id=course.id,
+        amount_cents=_to_cents(course.price),
+        currency="BRL",
+        status="pending",
+        provider="manual",
+    )
+    db.add(purchase)
+    db.commit()
+    db.refresh(purchase)
+
+    # Placeholder. Em produção, isso seria a URL do provedor.
+    checkout_url = f"/checkout/{purchase.id}"
+    return {"purchase": purchase, "checkout_url": checkout_url}
+
+
+@app.get("/purchases", response_model=list[PurchaseOut])
+def list_my_purchases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return (
+        db.query(Purchase)
+        .filter(Purchase.user_id == current_user.id)
+        .order_by(Purchase.created_at.desc())
+        .all()
+    )
+
+
+@app.get("/purchases/{purchase_id}", response_model=PurchaseOut)
+def get_purchase(purchase_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    purchase = db.query(Purchase).filter(Purchase.id == purchase_id, Purchase.user_id == current_user.id).first()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    return purchase
+
+
+@app.post("/payments/webhook")
+async def payments_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Webhook genérico para provedores (Stripe/MercadoPago).
+    Nesta fase, só armazena o payload para auditoria.
+    """
+    raw = await request.body()
+    payload_text = raw.decode("utf-8", errors="replace")
+
+    # Log sempre
+    event = PaymentEvent(
+        purchase_id=0,
+        provider="unknown",
+        event_type="webhook",
+        payload=payload_text,
+    )
+    db.add(event)
+    db.commit()
+
+    # Mercado Pago costuma enviar: {"data":{"id":"<payment_id>"},"type":"payment"}
+    try:
+        body = json.loads(payload_text or "{}")
+    except Exception:
+        return {"ok": True}
+
+    payment_id = (
+        (body.get("data") or {}).get("id")
+        or body.get("id")
+    )
+    if not payment_id:
+        return {"ok": True}
+
+    # Buscar status real do pagamento e atualizar Purchase via external_reference.
+    try:
+        sdk = _mp_sdk()
+        payment = sdk.payment().get(str(payment_id)).get("response") or {}
+        external_ref = str(payment.get("external_reference") or "")
+        status_mp = str(payment.get("status") or "")
+        purchase_id = int(external_ref) if external_ref.isdigit() else 0
+        if purchase_id:
+            purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+            if purchase:
+                event.purchase_id = purchase.id
+                event.provider = "mercadopago"
+                event.event_type = f"payment.{status_mp}"
+                purchase.provider = "mercadopago"
+                purchase.provider_reference = str(payment.get("id") or purchase.provider_reference or "")
+                if status_mp == "approved":
+                    purchase.status = "paid"
+                    purchase.paid_at = datetime.utcnow()
+                elif status_mp in {"cancelled", "rejected"}:
+                    purchase.status = status_mp
+                else:
+                    purchase.status = "pending"
+                db.commit()
+    except Exception:
+        # webhook não deve falhar
+        return {"ok": True}
+
+    return {"ok": True}
+
+
+@app.post("/admin/purchases/{purchase_id}/mark-paid", response_model=PurchaseOut)
+def admin_mark_purchase_paid(
+    purchase_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    purchase.status = "paid"
+    purchase.paid_at = datetime.utcnow()
+    db.commit()
+    db.refresh(purchase)
+    return purchase
+
 @app.get("/courses/{course_id}/lessons")
 def list_course_lessons(course_id: int, db: Session = Depends(get_db)) -> list[dict]:
     lessons = db.query(Lesson).filter(Lesson.course_id == course_id).all()
@@ -293,6 +507,10 @@ def enroll(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    course = db.query(Course).filter(Course.id == payload.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
     existing = (
         db.query(Enrollment)
         .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == payload.course_id)
@@ -300,6 +518,23 @@ def enroll(
     )
     if existing:
         return existing
+
+    # Curso pago: exige compra aprovada
+    if (course.price or 0) > 0:
+        paid = (
+            db.query(Purchase)
+            .filter(
+                Purchase.user_id == current_user.id,
+                Purchase.course_id == course.id,
+                Purchase.status == "paid",
+            )
+            .first()
+        )
+        if not paid:
+            raise HTTPException(
+                status_code=402,
+                detail="Pagamento pendente. Gere um PIX em /api/checkout/pix e conclua o pagamento para liberar a matrícula.",
+            )
 
     enrollment = Enrollment(
         user_id=current_user.id,

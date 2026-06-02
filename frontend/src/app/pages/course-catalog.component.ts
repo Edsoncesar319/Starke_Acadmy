@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { PortalDataService } from '../services/portal-data.service';
 
 @Component({
@@ -48,11 +49,13 @@ import { PortalDataService } from '../services/portal-data.service';
           </article>
         }
       </div>
+
     </section>
   `,
 })
 export class CourseCatalogComponent {
   readonly data = inject(PortalDataService);
+  private readonly router = inject(Router);
   readonly query = signal('');
   readonly category = signal('All');
   readonly categories = ['Technology', 'Design', 'Marketing', 'Health', 'Business'];
@@ -65,7 +68,10 @@ export class CourseCatalogComponent {
     }),
   );
 
-  enroll(courseId: number): void {
-    void this.data.enrollInCourse(courseId);
+  async enroll(courseId: number): Promise<void> {
+    await this.data.enrollInCourse(courseId);
+    if (this.data.pixCheckout()) {
+      await this.router.navigateByUrl(`/pagamento/${courseId}`);
+    }
   }
 }

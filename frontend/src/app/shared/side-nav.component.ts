@@ -50,6 +50,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
     return [
       { path: '/dashboard', label: 'Dashboard' },
       { path: '/catalog', label: 'Course Catalog' },
+      { path: '/pagamentos', label: 'Meus Pagamentos' },
       { path: '/lesson-player', label: 'Reprodutor de Lições' },
       { path: '/support', label: 'Support Center' },
       { path: '/profile', label: 'Meu Perfil' },

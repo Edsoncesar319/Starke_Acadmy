@@ -6,6 +6,8 @@ import { AdminLoginComponent } from './pages/admin-login.component';
 import { LessonPlayerComponent } from './pages/lesson-player.component';
 import { LoginComponent } from './pages/login.component';
 import { MatriculaComponent } from './pages/matricula.component';
+import { MyPaymentsComponent } from './pages/my-payments.component';
+import { PixPaymentComponent } from './pages/pix-payment.component';
 import { SuperAdminDashboardComponent } from './pages/super-admin-dashboard.component';
 import { ProfileComponent } from './pages/profile.component';
 import { SupportCenterComponent } from './pages/support-center.component';
@@ -40,6 +42,8 @@ export const routes: Routes = [
   { path: 'admin/dashboard', component: SuperAdminDashboardComponent, canActivate: [adminGuard] },
   { path: 'dashboard', component: DashboardComponent, canActivate: [studentGuard] },
   { path: 'catalog', component: CourseCatalogComponent, canActivate: [studentGuard] },
+  { path: 'pagamentos', component: MyPaymentsComponent, canActivate: [studentGuard] },
+  { path: 'pagamento/:courseId', component: PixPaymentComponent, canActivate: [studentGuard] },
   { path: 'lesson-player', component: LessonPlayerComponent, canActivate: [authGuard] },
   { path: 'support', component: SupportCenterComponent, canActivate: [studentGuard] },
   { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },

@@ -118,6 +118,39 @@ class ProgressUpdate(BaseModel):
     progress_percentage: int
 
 
+class CheckoutCreate(BaseModel):
+    course_id: int
+
+
+class PurchaseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    course_id: int
+    amount_cents: int
+    currency: str
+    status: str
+    provider: str
+    provider_reference: str | None = None
+    created_at: datetime
+    paid_at: datetime | None = None
+
+
+class CheckoutOut(BaseModel):
+    purchase: PurchaseOut
+    checkout_url: str | None = None
+
+
+class PixCheckoutOut(BaseModel):
+    purchase: PurchaseOut
+    provider: str
+    provider_reference: str
+    qr_code_base64: str
+    qr_code: str
+    ticket_url: str | None = None
+
+
 class TicketCreate(BaseModel):
     subject: str
 
