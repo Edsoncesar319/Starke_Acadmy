@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -556,3 +557,39 @@ async def admin_upload_lesson_video(
 ):
     video_url = await _save_uploaded_video(file)
     return {"video_url": video_url}
+
+
+# Composite app: API under /api, Angular static files at /
+PUBLIC_DIR = Path(__file__).resolve().parents[2] / "public"
+if (PUBLIC_DIR / "browser" / "index.html").is_file() and not (PUBLIC_DIR / "index.html").is_file():
+    PUBLIC_DIR = PUBLIC_DIR / "browser"
+api = app
+application = FastAPI(title="Starke Academy Portal")
+application.mount("/api", api)
+
+
+@application.get("/")
+async def serve_portal_index():
+    index = PUBLIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    return {"status": "ok", "message": "Build the frontend to populate /public"}
+
+
+@application.get("/{path:path}")
+async def serve_portal_assets(path: str):
+    if path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    asset = PUBLIC_DIR / path
+    if asset.is_file():
+        return FileResponse(asset)
+
+    index = PUBLIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+app = application
