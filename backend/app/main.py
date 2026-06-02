@@ -100,6 +100,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/build-id")
+def build_id():
+    # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
+    return {"build_id": "vercel-fix-521534b"}
+
+
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
