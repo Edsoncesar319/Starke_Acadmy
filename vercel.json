@@ -1,17 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "experimentalServices": {
+    "spa": {
+      "entrypoint": "public",
+      "routePrefix": "/"
+    },
     "backend": {
       "entrypoint": "backend/app/main.py",
-      "routePrefix": "/",
+      "routePrefix": "/api",
       "framework": "fastapi",
       "includeFiles": [
-        "public/**",
-        "backend/app/public/**",
-        "backend/app/branding/**"
+        "backend/app/branding/**",
+        "backend/app/public/**"
       ]
     }
   },
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "functions": {
     "api/blob-client-upload.js": {
       "memory": 1024,

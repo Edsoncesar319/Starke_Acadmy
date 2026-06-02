@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -627,17 +628,18 @@ def _favicon_paths() -> list[Path]:
 
 
 PUBLIC_DIR = _resolve_public_dir()
-api = app
+elite_api = app
 application = FastAPI(title="Starke Academy Portal")
-application.mount("/api", api)
+application.mount("/api", elite_api)
 
 
 @application.get("/favicon.ico", include_in_schema=False)
-async def favicon():
+async def portal_favicon():
     for path in _favicon_paths():
         if path.is_file():
             return FileResponse(path, media_type="image/x-icon")
     raise HTTPException(status_code=404, detail="favicon not found")
+
 
 if PUBLIC_DIR:
     application.mount(
@@ -654,5 +656,23 @@ else:
             "message": "Execute: cd frontend && npm run build (gera /public na raiz)",
         }
 
+    @application.get("/{full_path:path}")
+    async def spa_route_missing(full_path: str):
+        if full_path.startswith("api") or full_path == "favicon.ico":
+            raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Portal não publicado. Rode 'npm run build' no frontend "
+                "ou use 'npm start' em http://localhost:4200."
+            ),
+        )
 
-app = application
+
+def _vercel_api_only() -> bool:
+    return os.environ.get("VERCEL") == "1"
+
+
+# Na Vercel: serviço backend só em /api (rotas sem prefixo /api no app).
+# Local: portal composto (SPA + API em /api).
+app = elite_api if _vercel_api_only() else application
