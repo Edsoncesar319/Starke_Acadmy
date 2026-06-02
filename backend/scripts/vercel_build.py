@@ -175,6 +175,22 @@ def main() -> None:
         sys.exit(1)
 
     try:
+        on_vercel = os.environ.get("VERCEL") == "1"
+
+        # Se o build já foi committado em /public, na Vercel a gente pode
+        # pular o ng build para evitar falhas de toolchain/npm.
+        committed_index = (PUBLIC / "index.html").is_file()
+        if on_vercel and committed_index:
+            ensure_favicon()
+            mirror_to_app_package()
+            assets = list(PUBLIC.glob("*.js"))
+            print(
+                "Using committed SPA assets from /public (skipping ng build). "
+                f"SPA ready: {PUBLIC / 'index.html'} ({len(assets)} JS bundles)",
+                flush=True,
+            )
+            return
+
         ensure_toolchain()
         clean_stale_outputs()
         install_frontend()
@@ -182,8 +198,19 @@ def main() -> None:
         source = find_build_output()
         publish_to_public(source)
     except subprocess.CalledProcessError as exc:
+        # Se o ng build falhar na Vercel, não quebrar o deploy se o SPA já existe
+        # commitado (ainda assim, a API precisa subir).
         print(f"Build command failed (exit {exc.returncode})", file=sys.stderr)
-        sys.exit(1)
+        committed_index = (PUBLIC / "index.html").is_file()
+        if committed_index:
+            ensure_favicon()
+            mirror_to_app_package()
+            print(
+                "Continuing deploy using committed SPA assets from /public after build failure.",
+                flush=True,
+            )
+        else:
+            raise
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
