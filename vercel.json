@@ -5,7 +5,11 @@
       "entrypoint": "backend/app/main.py",
       "routePrefix": "/",
       "framework": "fastapi",
-      "includeFiles": ["public/**", "backend/app/public/**"]
+      "includeFiles": [
+        "public/**",
+        "backend/app/public/**",
+        "backend/app/branding/**"
+      ]
     }
   },
   "functions": {

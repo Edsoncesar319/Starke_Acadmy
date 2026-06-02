@@ -1,9 +1,9 @@
-import os
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -565,16 +565,28 @@ async def admin_upload_lesson_video(
     return {"video_url": video_url}
 
 
-# Composite app: API under /api; SPA is served from /public on Vercel CDN.
-def _on_vercel() -> bool:
-    return bool(os.environ.get("VERCEL"))
-
-
+# Composite app: API under /api; SPA/static em public/ (CDN + StaticFiles).
 def _resolve_public_dir() -> Path | None:
     app_dir = Path(__file__).resolve().parent
     backend_root = app_dir.parent
     repo_root = backend_root.parent
-    for public in (app_dir / "public", repo_root / "public", backend_root / "public"):
+    task_root = Path("/var/task")
+
+    candidates: list[Path] = [
+        app_dir / "public",
+        repo_root / "public",
+        backend_root / "public",
+    ]
+    if task_root.is_dir():
+        candidates.extend(
+            [
+                task_root / "public",
+                task_root / "backend" / "app" / "public",
+                task_root / "backend" / "public",
+            ]
+        )
+
+    for public in candidates:
         if (public / "index.html").is_file():
             return public
         nested = public / "browser"
@@ -583,19 +595,57 @@ def _resolve_public_dir() -> Path | None:
     return None
 
 
+def _static_file(path: Path, media_type: str) -> FileResponse:
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(path, media_type=media_type)
+
+
+def _favicon_paths() -> list[Path]:
+    app_dir = Path(__file__).resolve().parent
+    backend_root = app_dir.parent
+    repo_root = backend_root.parent
+    task_root = Path("/var/task")
+
+    paths = [
+        app_dir / "branding" / "favicon.ico",
+        app_dir / "public" / "favicon.ico",
+        repo_root / "public" / "favicon.ico",
+        backend_root / "public" / "favicon.ico",
+    ]
+    if task_root.is_dir():
+        paths.extend(
+            [
+                task_root / "public" / "favicon.ico",
+                task_root / "backend" / "app" / "branding" / "favicon.ico",
+                task_root / "backend" / "app" / "public" / "favicon.ico",
+            ]
+        )
+    if PUBLIC_DIR:
+        paths.insert(0, PUBLIC_DIR / "favicon.ico")
+    return paths
+
+
 PUBLIC_DIR = _resolve_public_dir()
 api = app
 application = FastAPI(title="Starke Academy Portal")
 application.mount("/api", api)
 
-# Em produção na Vercel, arquivos em /public são servidos pelo CDN (não montar aqui).
-if PUBLIC_DIR and not _on_vercel():
+
+@application.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    for path in _favicon_paths():
+        if path.is_file():
+            return FileResponse(path, media_type="image/x-icon")
+    raise HTTPException(status_code=404, detail="favicon not found")
+
+if PUBLIC_DIR:
     application.mount(
         "/",
         StaticFiles(directory=str(PUBLIC_DIR), html=True),
         name="spa",
     )
-elif not _on_vercel():
+else:
 
     @application.get("/")
     async def serve_portal_placeholder():

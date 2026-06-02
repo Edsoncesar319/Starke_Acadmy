@@ -17,10 +17,12 @@ dist/
 
 public/*
 !public/.gitkeep
+!public/favicon.ico
 backend/public/*
 !backend/public/.gitkeep
 backend/app/public/*
 !backend/app/public/.gitkeep
+!backend/app/public/favicon.ico
 
 backend/uploads/*
 !backend/uploads/.gitkeep

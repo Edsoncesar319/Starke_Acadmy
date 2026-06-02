@@ -147,6 +147,20 @@ def publish_to_public(source: Path) -> None:
     flatten_browser_subfolder(PUBLIC)
 
 
+def ensure_favicon() -> None:
+    """Garante favicon na raiz do output (browsers pedem /favicon.ico automaticamente)."""
+    app_branding = ROOT / "backend" / "app" / "branding" / "favicon.ico"
+    src = FRONTEND / "src" / "favicon.ico"
+    if not app_branding.is_file() and src.is_file():
+        app_branding.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, app_branding)
+
+    for dest in (PUBLIC / "favicon.ico", app_branding):
+        if src.is_file() and dest != app_branding:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
+
 def mirror_to_app_package() -> None:
     """Copy SPA beside main.py so it ships inside the Python bundle if needed."""
     if APP_PUBLIC.exists():
@@ -175,6 +189,7 @@ def main() -> None:
         sys.exit(1)
 
     flatten_browser_subfolder(PUBLIC)
+    ensure_favicon()
 
     if not (PUBLIC / "index.html").is_file():
         print("Missing public/index.html after publish step", file=sys.stderr)
