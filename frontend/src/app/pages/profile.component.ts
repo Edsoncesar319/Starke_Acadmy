@@ -1,11 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { PortalDataService } from '../services/portal-data.service';
+import { RouterLink } from '@angular/router';
+import { PortalDataService, Purchase } from '../services/portal-data.service';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <section class="mx-auto max-w-2xl space-y-6">
       <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
@@ -61,7 +62,7 @@ import { PortalDataService } from '../services/portal-data.service';
           name="email"
           type="email"
           required
-          placeholder="Email"
+          placeholder="E-mail"
           class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
         />
 
@@ -84,6 +85,60 @@ import { PortalDataService } from '../services/portal-data.service';
           {{ saving() ? 'Salvando...' : 'Salvar perfil' }}
         </button>
       </form>
+
+      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-6">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-medium text-gold-300">Minhas compras</h2>
+            <p class="text-xs text-slate-400">Remova cobranças pendentes que não deseja mais pagar.</p>
+          </div>
+          <a routerLink="/pagamentos" class="text-xs text-gold-300 underline-offset-2 hover:underline">
+            Ver todos os pagamentos
+          </a>
+        </div>
+
+        @if (data.purchases().length === 0) {
+          <p class="text-sm text-slate-500">Nenhuma compra registrada.</p>
+        } @else {
+          <ul class="space-y-3">
+            @for (purchase of data.purchases(); track purchase.id) {
+              <li class="rounded-lg border border-gold-500/15 bg-obsidian-800/50 p-3">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p class="text-sm text-slate-200">
+                      #{{ purchase.id }} · {{ courseTitle(purchase.course_id) }}
+                    </p>
+                    <p class="mt-1 text-xs text-slate-400">
+                      {{ formatAmount(purchase) }} · {{ formatPurchaseStatus(purchase.status) }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    @if (purchase.status === 'paid') {
+                      <button
+                        type="button"
+                        (click)="printReceipt(purchase)"
+                        class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        Imprimir comprovante
+                      </button>
+                    }
+                    @if (purchase.status !== 'paid') {
+                      <button
+                        type="button"
+                        (click)="removePurchase(purchase)"
+                        [disabled]="removingId() === purchase.id"
+                        class="rounded border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                      >
+                        {{ removingId() === purchase.id ? 'Removendo...' : 'Remover compra' }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </article>
     </section>
   `,
 })
@@ -91,6 +146,7 @@ export class ProfileComponent implements OnInit {
   readonly data = inject(PortalDataService);
   readonly saving = signal(false);
   readonly avatarUploading = signal(false);
+  readonly removingId = signal<number | null>(null);
 
   form = {
     name: '',
@@ -100,6 +156,7 @@ export class ProfileComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.data.refreshPortalData();
+    await this.data.refreshPurchases();
     const student = this.data.student();
     this.form = {
       name: student.name,
@@ -131,6 +188,42 @@ export class ProfileComponent implements OnInit {
       this.avatarUploading.set(false);
       input.value = '';
     }
+  }
+
+  courseTitle(courseId: number): string {
+    return this.data.courses().find((c) => c.id === courseId)?.title ?? `Curso #${courseId}`;
+  }
+
+  formatAmount(purchase: Purchase): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: purchase.currency || 'BRL' }).format(
+      (purchase.amount_cents || 0) / 100,
+    );
+  }
+
+  formatPurchaseStatus(status: string): string {
+    const labels: Record<string, string> = {
+      paid: 'Pago',
+      pending: 'Pendente',
+      cancelled: 'Cancelado',
+      rejected: 'Recusado',
+    };
+    return labels[status] ?? status;
+  }
+
+  printReceipt(purchase: Purchase): void {
+    this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
+  }
+
+  async removePurchase(purchase: Purchase): Promise<void> {
+    const name = this.courseTitle(purchase.course_id);
+    const confirmed = window.confirm(
+      `Remover a compra #${purchase.id} (${name})?\n\nEsta ação não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+
+    this.removingId.set(purchase.id);
+    await this.data.deletePurchase(purchase.id);
+    this.removingId.set(null);
   }
 
   async save(): Promise<void> {

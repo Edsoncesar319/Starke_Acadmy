@@ -64,6 +64,18 @@ export interface AdminLessonCreate {
   pdf_url: string | null;
 }
 
+export interface LessonQuizQuestion {
+  position: number;
+  prompt: string;
+  options: string[];
+  correct_index: number;
+}
+
+export interface LessonQuizPayload {
+  lesson_id: number;
+  questions: LessonQuizQuestion[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private readonly apiUrl = environment.apiUrl;
@@ -125,10 +137,17 @@ export class AdminService {
     await this.loadDashboardData();
   }
 
-  async deleteCourse(courseId: number, courseTitle: string): Promise<void> {
-    await firstValueFrom(this.http.delete(`${this.apiUrl}/admin/courses/${courseId}`));
-    this.status.set(`Curso "${courseTitle}" excluido.`);
-    await this.loadDashboardData();
+  async deleteCourse(courseId: number, courseTitle: string): Promise<boolean> {
+    this.error.set(null);
+    try {
+      await firstValueFrom(this.http.delete(`${this.apiUrl}/admin/courses/${courseId}`));
+      this.status.set(`Curso "${courseTitle}" removido.`);
+      await this.loadDashboardData();
+      return true;
+    } catch {
+      this.error.set(`Não foi possível remover o curso "${courseTitle}".`);
+      return false;
+    }
   }
 
   async uploadCourseImage(file: File): Promise<string> {
@@ -234,6 +253,84 @@ export class AdminService {
     await firstValueFrom(this.http.delete(`${this.apiUrl}/admin/lessons/${lesson.id}`));
     this.status.set(`Aula "${lesson.title}" excluída.`);
     await this.loadLessons(lesson.course_id);
+  }
+
+  async loadLessonQuiz(lessonId: number): Promise<LessonQuizPayload | null> {
+    this.error.set(null);
+    try {
+      return await firstValueFrom(
+        this.http.get<LessonQuizPayload>(`${this.apiUrl}/admin/lessons/${lessonId}/quiz`),
+      );
+    } catch {
+      this.error.set('Não foi possível carregar as questões deste capítulo.');
+      return null;
+    }
+  }
+
+  async saveLessonQuiz(lessonId: number, questions: LessonQuizQuestion[]): Promise<boolean> {
+    this.error.set(null);
+    const body = {
+      questions: questions.map((item) => ({
+        prompt: item.prompt.trim(),
+        options: item.options.map((option) => option.trim()),
+        correct_index: Number(item.correct_index),
+      })),
+    };
+
+    const url = `${this.apiUrl}/admin/lessons/${lessonId}/quiz`;
+    const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+
+    try {
+      await firstValueFrom(this.http.post<LessonQuizPayload>(url, body, { headers }));
+      this.status.set('10 questões do capítulo salvas com sucesso.');
+      return true;
+    } catch (postErr) {
+      const postStatus = postErr instanceof HttpErrorResponse ? postErr.status : 0;
+      if (postStatus !== 404 && postStatus !== 405) {
+        this.error.set(this.formatApiError(postErr, 'Não foi possível salvar as questões.'));
+        return false;
+      }
+    }
+
+    try {
+      await firstValueFrom(this.http.put<LessonQuizPayload>(url, body, { headers }));
+      this.status.set('10 questões do capítulo salvas com sucesso.');
+      return true;
+    } catch (putErr) {
+      this.error.set(this.formatApiError(putErr, 'Não foi possível salvar as questões.'));
+      return false;
+    }
+  }
+
+  private formatApiError(err: unknown, fallback: string): string {
+    if (!(err instanceof HttpErrorResponse)) {
+      return fallback;
+    }
+    const detail = err.error?.detail;
+    if (typeof detail === 'string') {
+      return detail;
+    }
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object' && 'msg' in item) {
+            return String((item as { msg: string }).msg);
+          }
+          return null;
+        })
+        .filter((item): item is string => Boolean(item));
+      if (messages.length > 0) {
+        return messages.join(' · ');
+      }
+    }
+    if (err.status === 0) {
+      return 'Sem conexão com o servidor. Verifique se o backend está ativo.';
+    }
+    if (err.status === 401 || err.status === 403) {
+      return 'Sessão expirada ou sem permissão. Faça login novamente como administrador.';
+    }
+    return fallback;
   }
 
   async uploadLessonVideo(file: File): Promise<string> {

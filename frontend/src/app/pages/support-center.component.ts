@@ -6,7 +6,7 @@ import { Component } from '@angular/core';
   template: `
     <section class="space-y-4">
       <input
-        placeholder="Search knowledge base..."
+        placeholder="Buscar na base de conhecimento..."
         class="w-full rounded-xl border border-gold-500/30 bg-obsidian-700/60 px-4 py-3 text-sm outline-none"
       />
 
@@ -20,7 +20,7 @@ import { Component } from '@angular/core';
       </div>
 
       <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-        <h4 class="mb-3 text-gold-300">FAQ</h4>
+        <h4 class="mb-3 text-gold-300">Perguntas frequentes</h4>
         @for (faq of faqs; track faq.q) {
           <details class="mb-2 rounded-lg border border-gold-500/20 px-3 py-2">
             <summary class="cursor-pointer text-sm text-slate-100">{{ faq.q }}</summary>
@@ -30,23 +30,32 @@ import { Component } from '@angular/core';
       </div>
 
       <div class="flex flex-wrap gap-3">
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Live Chat</button>
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Email Desk</button>
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Community Forum</button>
+        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Chat ao vivo</button>
+        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Suporte por e-mail</button>
+        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Comunidade</button>
       </div>
     </section>
   `,
 })
 export class SupportCenterComponent {
   readonly categories = [
-    { title: 'Technical', text: 'Login, playback, and platform issues.' },
-    { title: 'Academic', text: 'Curriculum, assessments and mentor guidance.' },
-    { title: 'Billing', text: 'Invoices, plans and renewal operations.' },
+    { title: 'Técnico', text: 'Login, reprodução de vídeos e problemas na plataforma.' },
+    { title: 'Acadêmico', text: 'Currículo, avaliações e orientação do mentor.' },
+    { title: 'Financeiro', text: 'Faturas, planos e renovações.' },
   ];
 
   readonly faqs = [
-    { q: 'How do I request certificate?', a: 'Complete all modules and visit your profile achievements section.' },
-    { q: 'Can I reschedule live sessions?', a: 'Yes, use Upcoming Live and click on session details to request reschedule.' },
-    { q: 'Where can I download lesson resources?', a: 'Open Lesson Player and use the Resources panel for each lesson.' },
+    {
+      q: 'Como solicito o certificado?',
+      a: 'Conclua todos os módulos e acesse a seção de conquistas no seu perfil.',
+    },
+    {
+      q: 'Posso reagendar as aulas ao vivo?',
+      a: 'Sim. Em Próximas ao vivo, abra os detalhes da sessão e solicite o reagendamento.',
+    },
+    {
+      q: 'Onde baixo os materiais das aulas?',
+      a: 'Abra Aulas e use o painel de recursos de cada lição para baixar PDFs e anexos.',
+    },
   ];
 }

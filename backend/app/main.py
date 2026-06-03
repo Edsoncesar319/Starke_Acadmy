@@ -29,7 +29,19 @@ from .storage import (
     upload_lesson_pdf,
     upload_lesson_video,
 )
-from .models import Course, Enrollment, Lesson, PaymentEvent, Purchase, StudentMessage, Ticket, User
+from .models import (
+    Course,
+    Enrollment,
+    Lesson,
+    LessonProgress,
+    PaymentEvent,
+    Purchase,
+    StudentMessage,
+    Ticket,
+    User,
+)
+from .payments import finalize_purchase_as_paid
+from .pix_brcode import build_pix_copia_cola, pix_qr_code_base64
 from .schemas import (
     CourseCreate,
     CourseOut,
@@ -53,8 +65,39 @@ from .schemas import (
     UserCreate,
     UserOut,
     UserProfileUpdate,
+    LessonQuizAdminOut,
+    LessonQuizSave,
+    LessonQuizStudentOut,
+    LessonQuizSubmit,
+    LessonQuizSubmitResult,
+    LessonProgressOut,
+    CourseLessonProgressOut,
+)
+from .lesson_progress import (
+    course_lesson_progress_list,
+    lesson_progress_dict,
+    mark_quiz_passed,
+    mark_video_completed,
+)
+from .lesson_quiz import (
+    QUIZ_SIZE,
+    ensure_lesson_quiz,
+    get_lesson_quiz_rows,
+    question_to_admin_dict,
+    question_to_student_dict,
+    save_lesson_quiz,
+    score_quiz_answers,
+    seed_quizzes_for_existing_lessons,
 )
 from .seed import seed_data
+
+_backend_root = Path(__file__).resolve().parent.parent
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_backend_root / ".env")
+except ImportError:
+    pass
 
 app = FastAPI(title="Starke Academy Elite API", version="1.0.0")
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -70,13 +113,18 @@ ALLOWED_VIDEO_MIME_TYPES = {
 }
 ALLOWED_PDF_EXTENSIONS = {".pdf"}
 ALLOWED_PDF_MIME_TYPES = {"application/pdf"}
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if raw:
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
 
 if not blob_storage_enabled():
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -93,15 +141,27 @@ async def ensure_utf8_json(request, call_next):
     return response
 
 
-@app.on_event("startup")
-def on_startup() -> None:
+_startup_done = False
+
+
+def _run_startup() -> None:
+    global _startup_done
+    if _startup_done:
+        return
+    _startup_done = True
     ensure_schema_updates()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         seed_data(db)
+        seed_quizzes_for_existing_lessons(db)
     finally:
         db.close()
+
+
+@app.on_event("startup")
+def on_elite_api_startup() -> None:
+    _run_startup()
 
 
 @app.get("/health")
@@ -119,7 +179,7 @@ def build_id():
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
     from .auth import get_password_hash
 
@@ -127,7 +187,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         name=payload.name,
         email=payload.email,
         password_hash=get_password_hash(payload.password),
-        student_level="Gold Scholar",
+        student_level="Aluno Elite",
     )
     db.add(user)
     db.commit()
@@ -139,7 +199,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
     token = create_access_token({"sub": str(user.id)})
     return Token(access_token=token)
@@ -161,7 +221,7 @@ def update_me(
 
     existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
     from .auth import get_password_hash
 
@@ -275,10 +335,96 @@ def _to_cents(amount: float) -> int:
     return max(0, int(round((amount or 0) * 100)))
 
 
+def _pix_receiver_key() -> str | None:
+    key = os.getenv("PIX_RECEIVER_KEY", "").strip()
+    return key or None
+
+
+def _pix_merchant_name() -> str:
+    return os.getenv("PIX_MERCHANT_NAME", "Starke Academy").strip() or "Starke Academy"
+
+
+def _pix_merchant_city() -> str:
+    return os.getenv("PIX_MERCHANT_CITY", "Sao Paulo").strip() or "Sao Paulo"
+
+
+def _mercadopago_enabled() -> bool:
+    return bool(os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN"))
+
+
+def _pix_mock_enabled() -> bool:
+    if _pix_receiver_key():
+        return False
+    flag = os.getenv("PIX_CHECKOUT_MOCK", "").strip().lower()
+    if flag in ("1", "true", "yes"):
+        return True
+    if flag in ("0", "false", "no"):
+        return False
+    if on_vercel():
+        return False
+    return not _mercadopago_enabled()
+
+
+def _static_pix_checkout_response(purchase: Purchase, course: Course) -> dict:
+    pix_key = _pix_receiver_key()
+    if not pix_key:
+        raise HTTPException(status_code=503, detail="Chave PIX não configurada (PIX_RECEIVER_KEY).")
+
+    txid = f"COMPRA{purchase.id}"
+    copia_cola = build_pix_copia_cola(
+        pix_key=pix_key,
+        amount_brl=purchase.amount_cents / 100.0,
+        merchant_name=_pix_merchant_name(),
+        merchant_city=_pix_merchant_city(),
+        txid=txid,
+    )
+    try:
+        qr_base64 = pix_qr_code_base64(copia_cola)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível gerar o QR Code PIX: {exc}",
+        ) from exc
+
+    purchase.provider = "pix"
+    purchase.provider_reference = txid
+    return {
+        "purchase": purchase,
+        "provider": "pix",
+        "provider_reference": txid,
+        "qr_code_base64": qr_base64,
+        "qr_code": copia_cola,
+        "ticket_url": None,
+    }
+
+
+# 1x1 PNG placeholder for local/dev PIX UI.
+_MOCK_PIX_QR_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def _mock_pix_checkout_response(purchase: Purchase) -> dict:
+    ref = f"mock-{purchase.id}"
+    purchase.provider = "mock"
+    purchase.provider_reference = ref
+    return {
+        "purchase": purchase,
+        "provider": "mock",
+        "provider_reference": ref,
+        "qr_code_base64": _MOCK_PIX_QR_BASE64,
+        "qr_code": f"PIX-DEV-MOCK-{purchase.id}",
+        "ticket_url": None,
+    }
+
+
 def _mp_sdk():
     token = os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN")
     if not token:
-        raise HTTPException(status_code=500, detail="Missing MERCADOPAGO_ACCESS_TOKEN")
+        raise HTTPException(
+            status_code=503,
+            detail="Mercado Pago não configurado. Defina MERCADOPAGO_ACCESS_TOKEN ou use PIX_CHECKOUT_MOCK=true em dev.",
+        )
     import mercadopago  # type: ignore
 
     return mercadopago.SDK(token)
@@ -294,6 +440,9 @@ def create_pix_checkout(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
+    if (course.price or 0) <= 0:
+        raise HTTPException(status_code=400, detail="Este curso é gratuito e não exige PIX.")
+
     purchase = Purchase(
         user_id=current_user.id,
         course_id=course.id,
@@ -306,6 +455,18 @@ def create_pix_checkout(
     db.commit()
     db.refresh(purchase)
 
+    if _pix_receiver_key() and not _mercadopago_enabled():
+        response = _static_pix_checkout_response(purchase, course)
+        db.commit()
+        db.refresh(purchase)
+        return response
+
+    if _pix_mock_enabled():
+        response = _mock_pix_checkout_response(purchase)
+        db.commit()
+        db.refresh(purchase)
+        return response
+
     sdk = _mp_sdk()
     payment_data = {
         "transaction_amount": float(purchase.amount_cents) / 100.0,
@@ -315,15 +476,24 @@ def create_pix_checkout(
         "payer": {"email": current_user.email},
     }
 
-    # Idempotência evita cobranças duplicadas em retry.
     try:
         from mercadopago.config import RequestOptions  # type: ignore
 
         request_options = RequestOptions()
         request_options.custom_headers = {"x-idempotency-key": uuid4().hex}
         result = sdk.payment().create(payment_data, request_options)
-    except Exception:
-        result = sdk.payment().create(payment_data)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha ao criar cobrança PIX no Mercado Pago: {exc}",
+        ) from exc
+
+    status_code = result.get("status")
+    if status_code and status_code >= 400:
+        message = (result.get("response") or {}).get("message") or result
+        raise HTTPException(status_code=502, detail=f"Mercado Pago recusou o PIX: {message}")
 
     payment = result.get("response") or {}
     mp_payment_id = str(payment.get("id") or "")
@@ -340,7 +510,7 @@ def create_pix_checkout(
     ticket_url = tx.get("ticket_url")
 
     if not qr_code_base64 or not qr_code:
-        raise HTTPException(status_code=500, detail="Mercado Pago did not return PIX data")
+        raise HTTPException(status_code=502, detail="Mercado Pago não retornou dados do PIX.")
 
     return {
         "purchase": purchase,
@@ -398,8 +568,33 @@ def list_my_purchases(current_user: User = Depends(get_current_user), db: Sessio
 def get_purchase(purchase_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id, Purchase.user_id == current_user.id).first()
     if not purchase:
-        raise HTTPException(status_code=404, detail="Purchase not found")
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
     return purchase
+
+
+@app.delete("/purchases/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_purchase(
+    purchase_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    purchase = (
+        db.query(Purchase)
+        .filter(Purchase.id == purchase_id, Purchase.user_id == current_user.id)
+        .first()
+    )
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+
+    if purchase.status == "paid":
+        raise HTTPException(
+            status_code=400,
+            detail="Compras já pagas não podem ser removidas. Cancele a matrícula no painel, se necessário.",
+        )
+
+    db.query(PaymentEvent).filter(PaymentEvent.purchase_id == purchase_id).delete(synchronize_session=False)
+    db.delete(purchase)
+    db.commit()
 
 
 @app.post("/payments/webhook")
@@ -450,18 +645,46 @@ async def payments_webhook(request: Request, db: Session = Depends(get_db)):
                 purchase.provider = "mercadopago"
                 purchase.provider_reference = str(payment.get("id") or purchase.provider_reference or "")
                 if status_mp == "approved":
-                    purchase.status = "paid"
-                    purchase.paid_at = datetime.utcnow()
+                    finalize_purchase_as_paid(db, purchase)
                 elif status_mp in {"cancelled", "rejected"}:
                     purchase.status = status_mp
+                    db.commit()
                 else:
                     purchase.status = "pending"
-                db.commit()
+                    db.commit()
     except Exception:
         # webhook não deve falhar
         return {"ok": True}
 
     return {"ok": True}
+
+
+@app.post("/purchases/{purchase_id}/confirm-payment", response_model=PurchaseOut)
+def student_confirm_payment(
+    purchase_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aluno confirma que realizou o PIX; libera curso e envia comprovante no chat."""
+    if current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Use o painel administrativo para confirmar pagamentos.")
+
+    purchase = (
+        db.query(Purchase)
+        .filter(Purchase.id == purchase_id, Purchase.user_id == current_user.id)
+        .first()
+    )
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+
+    if purchase.status == "paid":
+        return purchase
+
+    if purchase.status not in {"pending"}:
+        raise HTTPException(status_code=400, detail="Esta compra não pode ser confirmada.")
+
+    finalize_purchase_as_paid(db, purchase)
+    return purchase
 
 
 @app.post("/admin/purchases/{purchase_id}/mark-paid", response_model=PurchaseOut)
@@ -472,11 +695,8 @@ def admin_mark_purchase_paid(
 ):
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
-        raise HTTPException(status_code=404, detail="Purchase not found")
-    purchase.status = "paid"
-    purchase.paid_at = datetime.utcnow()
-    db.commit()
-    db.refresh(purchase)
+        raise HTTPException(status_code=404, detail="Compra não encontrada")
+    finalize_purchase_as_paid(db, purchase)
     return purchase
 
 @app.get("/courses/{course_id}/lessons")
@@ -494,6 +714,158 @@ def list_course_lessons(course_id: int, db: Session = Depends(get_db)) -> list[d
         }
         for lesson in lessons
     ]
+
+
+@app.get("/courses/{course_id}/lesson-progress", response_model=CourseLessonProgressOut)
+def get_course_lesson_progress(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Administradores não registram progresso de aluno.")
+
+    enrolled = (
+        db.query(Enrollment)
+        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == course_id)
+        .first()
+    )
+    if not enrolled:
+        raise HTTPException(status_code=403, detail="Matricule-se no curso para ver o progresso.")
+
+    return course_lesson_progress_list(db, current_user.id, course_id)
+
+
+@app.get("/lessons/{lesson_id}/quiz", response_model=LessonQuizStudentOut)
+def get_lesson_quiz(
+    lesson_id: int,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+    rows = get_lesson_quiz_rows(db, lesson_id)
+    return {
+        "lesson_id": lesson_id,
+        "questions": [question_to_student_dict(row) for row in rows],
+    }
+
+
+@app.post("/lessons/{lesson_id}/quiz/submit", response_model=LessonQuizSubmitResult)
+def submit_lesson_quiz(
+    lesson_id: int,
+    payload: LessonQuizSubmit,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Administradores não enviam avaliação de aluno.")
+
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+
+    enrolled = (
+        db.query(Enrollment)
+        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == lesson.course_id)
+        .first()
+    )
+    if not enrolled:
+        raise HTTPException(status_code=403, detail="Matricule-se no curso para realizar a avaliação.")
+
+    rows = get_lesson_quiz_rows(db, lesson_id)
+    try:
+        score, passed = score_quiz_answers(rows, payload.answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    progress_row = (
+        db.query(LessonProgress)
+        .filter(LessonProgress.user_id == current_user.id, LessonProgress.lesson_id == lesson_id)
+        .first()
+    )
+    snapshot = lesson_progress_dict(progress_row)
+    chapter_progress = snapshot["chapter_progress"]
+    course_contribution = snapshot["course_contribution"]
+    from .lesson_progress import compute_course_progress
+
+    course_progress = compute_course_progress(db, current_user.id, lesson.course_id)
+    if passed:
+        _, chapter_progress, course_contribution, course_progress = mark_quiz_passed(
+            db, current_user.id, lesson_id
+        )
+
+    return {
+        "score": score,
+        "total": QUIZ_SIZE,
+        "passed": passed,
+        "minimum_score": 8,
+        "chapter_progress": chapter_progress,
+        "course_contribution": course_contribution,
+        "course_progress": course_progress,
+    }
+
+
+@app.get("/lessons/{lesson_id}/progress", response_model=LessonProgressOut)
+def get_lesson_progress(
+    lesson_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+
+    progress = (
+        db.query(LessonProgress)
+        .filter(LessonProgress.user_id == current_user.id, LessonProgress.lesson_id == lesson_id)
+        .first()
+    )
+    from .lesson_progress import compute_course_progress
+
+    data = lesson_progress_dict(progress)
+    data["lesson_id"] = lesson_id
+    data["course_progress"] = compute_course_progress(db, current_user.id, lesson.course_id)
+    return data
+
+
+@app.post("/lessons/{lesson_id}/progress/video", response_model=LessonProgressOut)
+def complete_lesson_video(
+    lesson_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Administradores não registram progresso de aluno.")
+
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+
+    enrolled = (
+        db.query(Enrollment)
+        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == lesson.course_id)
+        .first()
+    )
+    if not enrolled:
+        raise HTTPException(status_code=403, detail="Matricule-se no curso para registrar progresso.")
+
+    try:
+        progress, chapter_progress, course_contribution, course_progress = mark_video_completed(
+            db, current_user.id, lesson_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "lesson_id": lesson_id,
+        "video_completed": progress.video_completed,
+        "quiz_passed": progress.quiz_passed,
+        "chapter_progress": chapter_progress,
+        "course_contribution": course_contribution,
+        "course_progress": course_progress,
+    }
 
 
 @app.get("/enrollments", response_model=list[EnrollmentOut])
@@ -570,6 +942,24 @@ def update_progress(
     return enrollment
 
 
+@app.delete("/enrollments/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_enrollment(
+    enrollment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    enrollment = (
+        db.query(Enrollment)
+        .filter(Enrollment.id == enrollment_id, Enrollment.user_id == current_user.id)
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Matrícula não encontrada")
+
+    db.delete(enrollment)
+    db.commit()
+
+
 @app.get("/tickets", response_model=list[TicketOut])
 def list_tickets(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Ticket).filter(Ticket.user_id == current_user.id).all()
@@ -626,7 +1016,7 @@ def admin_update_student(
 
     existing = db.query(User).filter(User.email == payload.email, User.id != student_id).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
     student.name = payload.name.strip()
     student.email = payload.email
@@ -708,6 +1098,20 @@ def admin_delete_course(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
+    purchase_ids = [
+        row[0]
+        for row in db.query(Purchase.id).filter(Purchase.course_id == course_id).all()
+    ]
+    if purchase_ids:
+        db.query(PaymentEvent).filter(PaymentEvent.purchase_id.in_(purchase_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Purchase).filter(Purchase.course_id == course_id).delete(synchronize_session=False)
+
+    db.query(StudentMessage).filter(StudentMessage.course_id == course_id).update(
+        {StudentMessage.course_id: None},
+        synchronize_session=False,
+    )
     db.delete(course)
     db.commit()
 
@@ -782,7 +1186,64 @@ def admin_create_lesson(
     db.add(lesson)
     db.commit()
     db.refresh(lesson)
+    ensure_lesson_quiz(db, lesson.id)
     return lesson
+
+
+@app.get("/admin/lessons/{lesson_id}/quiz", response_model=LessonQuizAdminOut)
+def admin_get_lesson_quiz(
+    lesson_id: int,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+    rows = get_lesson_quiz_rows(db, lesson_id)
+    return {
+        "lesson_id": lesson_id,
+        "questions": [question_to_admin_dict(row) for row in rows],
+    }
+
+
+def _persist_lesson_quiz(lesson_id: int, payload: LessonQuizSave, db: Session) -> dict:
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Aula não encontrada.")
+
+    try:
+        rows = save_lesson_quiz(
+            db,
+            lesson_id,
+            [item.model_dump() for item in payload.questions],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "lesson_id": lesson_id,
+        "questions": [question_to_admin_dict(row) for row in rows],
+    }
+
+
+@app.put("/admin/lessons/{lesson_id}/quiz", response_model=LessonQuizAdminOut)
+def admin_save_lesson_quiz_put(
+    lesson_id: int,
+    payload: LessonQuizSave,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    return _persist_lesson_quiz(lesson_id, payload, db)
+
+
+@app.post("/admin/lessons/{lesson_id}/quiz", response_model=LessonQuizAdminOut)
+def admin_save_lesson_quiz_post(
+    lesson_id: int,
+    payload: LessonQuizSave,
+    _: User = Depends(get_current_content_manager),
+    db: Session = Depends(get_db),
+):
+    return _persist_lesson_quiz(lesson_id, payload, db)
 
 
 @app.put("/admin/lessons/{lesson_id}", response_model=LessonOut)
@@ -913,7 +1374,20 @@ def _favicon_paths() -> list[Path]:
 PUBLIC_DIR = _resolve_public_dir()
 elite_api = app
 application = FastAPI(title="Starke Academy Portal")
+application.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 application.mount("/api", elite_api)
+
+
+@application.on_event("startup")
+def on_application_startup() -> None:
+    # Mounted sub-apps do not always run their own startup handlers.
+    _run_startup()
 
 
 @application.get("/favicon.ico", include_in_schema=False)

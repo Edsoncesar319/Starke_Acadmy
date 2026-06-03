@@ -83,3 +83,26 @@ def ensure_schema_updates() -> None:
     if "pdf_url" not in lesson_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE lessons ADD COLUMN pdf_url VARCHAR(1024)"))
+
+    # Legacy SQLite DBs created before payment tables existed.
+    table_names = set(inspector.get_table_names())
+    payment_tables = [name for name in ("purchases", "payment_events") if name not in table_names]
+    if payment_tables:
+        from . import models as _models  # noqa: F401
+
+        tables = [Base.metadata.tables[name] for name in payment_tables if name in Base.metadata.tables]
+        if tables:
+            Base.metadata.create_all(bind=engine, tables=tables)
+
+    if "lesson_quiz_questions" not in table_names:
+        from . import models as _models  # noqa: F401
+
+        if "lesson_quiz_questions" in Base.metadata.tables:
+            Base.metadata.create_all(bind=engine, tables=[Base.metadata.tables["lesson_quiz_questions"]])
+
+    table_names = set(inspect(engine).get_table_names())
+    if "lesson_progress" not in table_names:
+        from . import models as _models  # noqa: F401
+
+        if "lesson_progress" in Base.metadata.tables:
+            Base.metadata.create_all(bind=engine, tables=[Base.metadata.tables["lesson_progress"]])

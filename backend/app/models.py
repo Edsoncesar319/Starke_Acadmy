@@ -13,7 +13,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(180), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    student_level: Mapped[str] = mapped_column(String(80), default="Gold Scholar")
+    student_level: Mapped[str] = mapped_column(String(80), default="Aluno Elite")
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_instructor: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -60,6 +60,42 @@ class Lesson(Base):
     pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     course = relationship("Course", back_populates="lessons")
+    quiz_questions = relationship(
+        "LessonQuizQuestion",
+        back_populates="lesson",
+        cascade="all,delete-orphan",
+        order_by="LessonQuizQuestion.position",
+    )
+    student_progress = relationship(
+        "LessonProgress",
+        back_populates="lesson",
+        cascade="all,delete-orphan",
+    )
+
+
+class LessonQuizQuestion(Base):
+    __tablename__ = "lesson_quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    options_json: Mapped[str] = mapped_column(Text, nullable=False)
+    correct_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    lesson = relationship("Lesson", back_populates="quiz_questions")
+
+
+class LessonProgress(Base):
+    __tablename__ = "lesson_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False, index=True)
+    video_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    quiz_passed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    lesson = relationship("Lesson", back_populates="student_progress")
 
 
 class Enrollment(Base):

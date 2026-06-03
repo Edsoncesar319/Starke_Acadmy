@@ -33,7 +33,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
       </nav>
 
       <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-8 shadow-gold">
-      <h1 class="text-2xl font-semibold text-gold-300">Starke Elite Access</h1>
+      <h1 class="text-2xl font-semibold text-gold-300">Acesso Starke Elite</h1>
       <p class="mt-2 text-sm text-slate-300">Entre para continuar sua jornada premium.</p>
 
       <form class="mt-6 space-y-4" (ngSubmit)="submit()">
@@ -43,7 +43,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           name="email"
           required
           class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
-          placeholder="Email"
+          placeholder="E-mail"
         />
         <input
           type="password"
@@ -58,7 +58,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           [disabled]="loading()"
           class="w-full rounded-lg border border-gold-500/40 px-4 py-2 text-sm font-semibold text-gold-300 transition hover:bg-gold-500/10 disabled:opacity-60"
         >
-          {{ loading() ? 'Authenticating...' : 'Enter Portal' }}
+          {{ loading() ? 'Entrando...' : 'Entrar no portal' }}
         </button>
       </form>
 
@@ -98,7 +98,7 @@ export class LoginComponent {
         await this.router.navigateByUrl('/dashboard');
       }
     } catch {
-      this.error.set('Invalid credentials or backend unavailable.');
+      this.error.set('Credenciais inválidas ou servidor indisponível.');
     } finally {
       this.loading.set(false);
     }

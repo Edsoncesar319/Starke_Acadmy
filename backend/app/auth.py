@@ -38,7 +38,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Não foi possível validar as credenciais",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -68,6 +68,6 @@ def get_current_content_manager(current_user: User = Depends(get_current_user)) 
     if not (current_user.is_admin or current_user.is_instructor):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Instructor or admin access required",
+            detail="Acesso de instrutor ou administrador necessário",
         )
     return current_user

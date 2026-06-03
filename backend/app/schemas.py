@@ -100,6 +100,66 @@ class LessonUpdate(BaseModel):
     pdf_url: str | None = None
 
 
+class LessonQuizQuestionIn(BaseModel):
+    prompt: str
+    options: list[str]
+    correct_index: int
+
+
+class LessonQuizSave(BaseModel):
+    questions: list[LessonQuizQuestionIn]
+
+
+class LessonQuizQuestionStudentOut(BaseModel):
+    position: int
+    prompt: str
+    options: list[str]
+
+
+class LessonQuizQuestionAdminOut(LessonQuizQuestionStudentOut):
+    correct_index: int
+
+
+class LessonQuizStudentOut(BaseModel):
+    lesson_id: int
+    questions: list[LessonQuizQuestionStudentOut]
+
+
+class LessonQuizAdminOut(BaseModel):
+    lesson_id: int
+    questions: list[LessonQuizQuestionAdminOut]
+
+
+class LessonQuizSubmit(BaseModel):
+    answers: list[int]
+
+
+class LessonQuizSubmitResult(BaseModel):
+    score: int
+    total: int
+    passed: bool
+    minimum_score: int
+    chapter_progress: int = 0
+    course_contribution: int = 0
+    course_progress: int = 0
+
+
+class LessonProgressOut(BaseModel):
+    lesson_id: int
+    video_completed: bool
+    quiz_passed: bool
+    chapter_progress: int
+    course_contribution: int = 0
+    course_progress: int = 0
+
+
+class CourseLessonProgressOut(BaseModel):
+    course_id: int
+    course_progress: int
+    chapter_weight_percent: int = 10
+    lessons: list[LessonProgressOut]
+
+
 class EnrollmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

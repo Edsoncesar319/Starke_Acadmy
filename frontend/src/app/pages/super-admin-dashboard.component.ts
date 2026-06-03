@@ -1,26 +1,28 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, QueryList, ViewChildren, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
 import { AdminCourse, AdminLesson, AdminService } from '../services/admin.service';
 import { StarkeLogoComponent } from '../shared/starke-logo.component';
+import { LessonQuizEditorComponent } from '../shared/lesson-quiz-editor.component';
+import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 
 @Component({
   selector: 'app-super-admin-dashboard',
   standalone: true,
-  imports: [FormsModule, StarkeLogoComponent],
+  imports: [FormsModule, StarkeLogoComponent, LessonQuizEditorComponent],
   template: `
     <section class="space-y-6 p-6">
       <header class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
         <div class="flex flex-wrap items-center gap-6">
           <app-starke-logo size="md" [showTitle]="false" />
           <div class="min-w-0 flex-1">
-        <h1 class="text-2xl font-semibold text-gold-300">Super Admin Dashboard</h1>
+        <h1 class="text-2xl font-semibold text-gold-300">Painel do administrador</h1>
         <p class="mt-1 text-sm text-slate-300">Edição dos cursos oferecidos e envio de detalhes para alunos.</p>
         <p class="mt-2 text-xs text-slate-500">
           {{ admin.students().length }} aluno(s) matriculado(s) · atualização automática a cada 8s
         </p>
         <button (click)="logout()" class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10">
-          Logout
+          Sair
         </button>
           </div>
         </div>
@@ -55,7 +57,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                 <tr>
                   <th class="px-4 py-3">ID</th>
                   <th class="px-4 py-3">Aluno</th>
-                  <th class="px-4 py-3">Email</th>
+                  <th class="px-4 py-3">E-mail</th>
                   <th class="px-4 py-3">Nível</th>
                   <th class="px-4 py-3 text-right">Ação</th>
                 </tr>
@@ -107,17 +109,30 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
         <h2 class="mb-1 text-lg font-medium text-gold-300">Editar Aulas e Vídeo-aulas</h2>
         <p class="mb-4 text-xs text-slate-500">Crie, edite, envie vídeos ou exclua lições por curso.</p>
 
-        <label class="mb-4 block text-xs text-slate-400">Curso</label>
-        <select
-          [(ngModel)]="lessonCourseId"
-          (ngModelChange)="onLessonCourseChange()"
-          name="lessonCourseId"
-          class="mb-6 w-full max-w-md rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
-        >
-          @for (course of admin.courses(); track course.id) {
-            <option [ngValue]="course.id">{{ course.title }}</option>
+        <div class="mb-6 flex flex-wrap items-end gap-3">
+          <div class="min-w-[12rem] flex-1">
+            <label class="mb-2 block text-xs text-slate-400">Curso</label>
+            <select
+              [(ngModel)]="lessonCourseId"
+              (ngModelChange)="onLessonCourseChange()"
+              name="lessonCourseId"
+              class="w-full max-w-md rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
+            >
+              @for (course of admin.courses(); track course.id) {
+                <option [ngValue]="course.id">{{ course.title }}</option>
+              }
+            </select>
+          </div>
+          @if (selectedLessonCourse(); as course) {
+            <button
+              type="button"
+              (click)="deleteCourse(course)"
+              class="rounded-lg border border-red-400/40 px-4 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/10"
+            >
+              Remover curso
+            </button>
           }
-        </select>
+        </div>
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <form class="space-y-3 rounded-lg border border-gold-500/20 p-4" (ngSubmit)="createLesson()">
@@ -188,8 +203,9 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                 </p>
               }
               @for (lesson of admin.lessons(); track lesson.id) {
+                <div class="space-y-2 rounded-lg border border-gold-500/20 bg-obsidian-800/40 p-3">
                 <form
-                  class="space-y-2 rounded-lg border border-gold-500/20 bg-obsidian-800/40 p-3"
+                  class="space-y-2"
                   (ngSubmit)="saveLesson(lesson)"
                 >
                   <p class="text-xs text-slate-500">Aula #{{ lesson.id }}</p>
@@ -258,6 +274,13 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                     </button>
                     <button
                       type="button"
+                      (click)="toggleQuizEditor(lesson.id)"
+                      class="rounded border border-gold-500/40 px-3 py-1.5 text-xs text-gold-300 hover:bg-gold-500/10"
+                    >
+                      {{ editingQuizLessonId() === lesson.id ? 'Fechar questões' : 'Editar 10 questões' }}
+                    </button>
+                    <button
+                      type="button"
                       (click)="deleteLesson(lesson)"
                       class="rounded border border-red-400/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
                     >
@@ -265,18 +288,104 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                     </button>
                   </div>
                 </form>
+                  @if (editingQuizLessonId() === lesson.id) {
+                    <app-lesson-quiz-editor
+                      #activeQuizEditor
+                      [lessonId]="lesson.id"
+                      [lessonTitle]="lesson.title"
+                    />
+                    <div class="sticky bottom-0 z-20 mt-2 flex flex-wrap gap-2 rounded-lg border border-gold-500/30 bg-obsidian-900/95 p-3 backdrop-blur">
+                      <button
+                        type="button"
+                        (click)="saveQuizForLesson(lesson.id, activeQuizEditor)"
+                        [disabled]="quizSavingId() === lesson.id || activeQuizEditor.isSaving()"
+                        class="rounded-lg border-2 border-gold-500 bg-gold-500/25 px-4 py-2 text-sm font-semibold text-gold-100 hover:bg-gold-500/40 disabled:opacity-60"
+                      >
+                        {{
+                          quizSavingId() === lesson.id || activeQuizEditor.isSaving()
+                            ? 'Salvando questões...'
+                            : 'Salvar 10 questões'
+                        }}
+                      </button>
+                      <button
+                        type="button"
+                        (click)="activeQuizEditor.reload()"
+                        [disabled]="quizSavingId() === lesson.id"
+                        class="rounded border border-slate-500/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-500/10 disabled:opacity-60"
+                      >
+                        Recarregar do servidor
+                      </button>
+                    </div>
+                  }
+                </div>
               }
             </div>
           </div>
         </div>
       </article>
 
+      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-medium text-gold-300">Cursos cadastrados</h2>
+            <p class="text-xs text-slate-500">Remova ou edite os cursos oferecidos na plataforma.</p>
+          </div>
+          <span class="rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-300">
+            Total: {{ admin.courses().length }}
+          </span>
+        </div>
+
+        @if (admin.courses().length === 0) {
+          <p class="rounded-lg border border-gold-500/15 bg-obsidian-800/60 px-4 py-6 text-center text-sm text-slate-400">
+            Nenhum curso cadastrado.
+          </p>
+        } @else {
+          <div class="overflow-auto rounded-lg border border-gold-500/15">
+            <table class="w-full min-w-[520px] text-left text-sm">
+              <thead class="bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
+                <tr>
+                  <th class="px-4 py-3">Curso</th>
+                  <th class="px-4 py-3">Categoria</th>
+                  <th class="px-4 py-3">Preço</th>
+                  <th class="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (course of admin.courses(); track course.id) {
+                  <tr class="border-t border-gold-500/10 hover:bg-gold-500/5">
+                    <td class="px-4 py-3 font-medium text-slate-100">{{ course.title }}</td>
+                    <td class="px-4 py-3 text-slate-300">{{ course.category }}</td>
+                    <td class="px-4 py-3 text-gold-300/90">{{ formatCoursePrice(course.price) }}</td>
+                    <td class="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        (click)="focusCourseEdit(course.id)"
+                        class="mr-2 rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        (click)="deleteCourse(course)"
+                        class="rounded border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                      >
+                        Remover curso
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </article>
+
       <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
           <h2 class="mb-4 text-lg font-medium text-gold-300">Inserir Novo Curso</h2>
           <form class="mb-6 space-y-2 rounded-lg border border-gold-500/20 p-3" (ngSubmit)="createNewCourse()">
-            <input [(ngModel)]="newCourse.title" name="new-title" required placeholder="Titulo do curso" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm" />
-            <textarea [(ngModel)]="newCourse.description" name="new-description" required placeholder="Descricao" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"></textarea>
+            <input [(ngModel)]="newCourse.title" name="new-title" required placeholder="Título do curso" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm" />
+            <textarea [(ngModel)]="newCourse.description" name="new-description" required placeholder="Descrição" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"></textarea>
             <div class="grid grid-cols-3 gap-2">
               <input [(ngModel)]="newCourse.category" name="new-category" required placeholder="Categoria" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
               <input [(ngModel)]="newCourse.price" name="new-price" required type="number" min="0" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
@@ -289,7 +398,11 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           <h2 class="mb-4 text-lg font-medium text-gold-300">Editar Cursos Oferecidos</h2>
           <div class="space-y-4">
             @for (course of admin.courses(); track course.id) {
-              <form (ngSubmit)="saveCourse(course)" class="space-y-2 rounded-lg border border-gold-500/20 p-3">
+              <form
+                [id]="courseFormId(course.id)"
+                (ngSubmit)="saveCourse(course)"
+                class="space-y-2 rounded-lg border border-gold-500/20 p-3"
+              >
                 <input [(ngModel)]="course.title" [name]="'title-' + course.id" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm" />
                 <textarea [(ngModel)]="course.description" [name]="'description-' + course.id" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"></textarea>
                 <div class="grid grid-cols-3 gap-2">
@@ -314,14 +427,18 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
                     <p class="text-xs text-gold-300">Enviando imagem...</p>
                   }
                 </div>
-                <button type="submit" class="rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10">Salvar Curso</button>
-                <button
-                  type="button"
-                  (click)="deleteCourse(course)"
-                  class="ml-2 rounded border border-red-400/40 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
-                >
-                  Excluir curso
-                </button>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <button type="submit" class="rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10">
+                    Salvar curso
+                  </button>
+                  <button
+                    type="button"
+                    (click)="deleteCourse(course)"
+                    class="rounded border border-red-400/40 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
+                  >
+                    Remover curso
+                  </button>
+                </div>
               </form>
             }
           </div>
@@ -343,14 +460,14 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
               name="studentProfileEmail"
               type="email"
               required
-              placeholder="Email"
+              placeholder="E-mail"
               class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
             />
             <input
               [(ngModel)]="studentProfile.studentLevel"
               name="studentProfileLevel"
               required
-              placeholder="Nível (ex: Platinum Scholar)"
+              placeholder="Nível (ex: Aluno Platina)"
               class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
             />
             <div class="flex flex-wrap items-center gap-3">
@@ -400,7 +517,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
               <p class="text-sm font-semibold text-gold-300">Chat com Aluno</p>
               <p class="text-xs text-slate-400">{{ selectedStudentName() || 'Selecione um aluno' }}</p>
             </div>
-            <span class="rounded-full border border-gold-500/30 px-2 py-0.5 text-xs text-gold-300">Admin</span>
+            <span class="rounded-full border border-gold-500/30 px-2 py-0.5 text-xs text-gold-300">Administrador</span>
           </header>
 
           <div class="border-b border-gold-500/20 px-3 py-2">
@@ -476,9 +593,13 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   `,
 })
 export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
+  @ViewChildren('activeQuizEditor') quizEditors!: QueryList<LessonQuizEditorComponent>;
+
   readonly admin = inject(AdminService);
   private readonly auth = inject(AuthService);
+  private readonly quizDraft = inject(LessonQuizDraftService);
   private refreshTimer?: ReturnType<typeof setInterval>;
+  readonly quizSavingId = signal<number | null>(null);
   private static readonly REFRESH_MS = 8000;
 
   selectedUserId: number | null = null;
@@ -491,6 +612,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   readonly avatarUploading = signal(false);
   readonly videoUploading = signal(false);
   readonly lessonSavingId = signal<number | null>(null);
+  readonly editingQuizLessonId = signal<number | null>(null);
   readonly imageUploading = signal<Record<number, boolean>>({});
   newCourse = this.emptyCourseForm();
   newLesson = {
@@ -621,9 +743,47 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
   }
 
+  toggleQuizEditor(lessonId: number): void {
+    this.editingQuizLessonId.update((current) => (current === lessonId ? null : lessonId));
+  }
+
+  async saveQuizForLesson(lessonId: number, editor?: LessonQuizEditorComponent): Promise<void> {
+    this.quizSavingId.set(lessonId);
+    this.admin.error.set(null);
+    try {
+      if (editor) {
+        const ok = await editor.saveIfValid();
+        if (!ok) return;
+        return;
+      }
+      const draft = this.quizDraft.get(lessonId);
+      const validationError = draft ? this.quizDraft.validate(draft) : 'Abra o editor e carregue as questões.';
+      if (validationError) {
+        this.admin.error.set(validationError);
+        return;
+      }
+      const ok = await this.admin.saveLessonQuiz(lessonId, this.quizDraft.buildPayload(draft!));
+      if (!ok) return;
+    } finally {
+      this.quizSavingId.set(null);
+    }
+  }
+
   async saveLesson(lesson: AdminLesson): Promise<void> {
     this.lessonSavingId.set(lesson.id);
     try {
+      if (this.editingQuizLessonId() === lesson.id) {
+        const editor = this.quizEditors?.find((item) => item.lessonId() === lesson.id);
+        if (editor) {
+          const quizSaved = await editor.saveIfValid();
+          if (!quizSaved) {
+            this.admin.error.set(
+              this.admin.error() ?? 'Corrija as questões antes de salvar a aula (ou use o botão Salvar 10 questões).',
+            );
+            return;
+          }
+        }
+      }
       await this.admin.updateLesson(lesson);
     } catch {
       // handled by AdminService
@@ -734,10 +894,45 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  selectedLessonCourse(): AdminCourse | null {
+    if (!this.lessonCourseId) return null;
+    return this.admin.courses().find((course) => course.id === this.lessonCourseId) ?? null;
+  }
+
+  courseFormId(courseId: number): string {
+    return `course-form-${courseId}`;
+  }
+
+  formatCoursePrice(price: number): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price || 0);
+  }
+
+  focusCourseEdit(courseId: number): void {
+    document.getElementById(this.courseFormId(courseId))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   async deleteCourse(course: AdminCourse): Promise<void> {
-    const confirmed = window.confirm(`Tem certeza que deseja excluir o curso "${course.title}"?`);
+    const confirmed = window.confirm(
+      `Tem certeza que deseja remover o curso "${course.title}"?\n\nTodas as aulas e matrículas deste curso serão excluídas. Esta ação não pode ser desfeita.`,
+    );
     if (!confirmed) return;
-    await this.admin.deleteCourse(course.id, course.title);
+
+    const removed = await this.admin.deleteCourse(course.id, course.title);
+    if (!removed) return;
+
+    if (this.selectedCourseId === course.id) {
+      this.selectedCourseId = null;
+    }
+
+    if (this.lessonCourseId === course.id) {
+      const next = this.admin.courses()[0];
+      this.lessonCourseId = next?.id ?? null;
+      if (this.lessonCourseId) {
+        await this.admin.loadLessons(this.lessonCourseId);
+      } else {
+        this.admin.lessons.set([]);
+      }
+    }
   }
 
   async sendDetails(): Promise<void> {

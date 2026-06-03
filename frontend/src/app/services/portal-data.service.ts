@@ -2,7 +2,9 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
+import { printPaymentReceipt, purchaseToReceiptData } from '../utils/payment-receipt.util';
 
 export interface Course {
   id: number;
@@ -53,6 +55,7 @@ export interface PixCheckout {
   purchase: {
     id: number;
     status: string;
+    course_id: number;
   };
   provider: string;
   provider_reference: string;
@@ -74,16 +77,49 @@ export interface Purchase {
   paid_at: string | null;
 }
 
+export interface ChapterQuizQuestion {
+  position: number;
+  prompt: string;
+  options: string[];
+}
+
+export interface ChapterQuizSubmitResult {
+  score: number;
+  total: number;
+  passed: boolean;
+  minimum_score: number;
+  chapter_progress: number;
+  course_contribution: number;
+  course_progress: number;
+}
+
+export interface LessonProgress {
+  lesson_id: number;
+  video_completed: boolean;
+  quiz_passed: boolean;
+  chapter_progress: number;
+  course_contribution: number;
+  course_progress: number;
+}
+
+export interface CourseLessonProgressBundle {
+  course_id: number;
+  course_progress: number;
+  chapter_weight_percent: number;
+  lessons: LessonProgress[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class PortalDataService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
   private readonly apiUrl = environment.apiUrl;
 
   readonly student = signal<StudentProfile>({
     id: 0,
-    name: 'Loading student...',
+    name: 'Carregando...',
     email: '',
-    studentLevel: 'Gold Scholar',
+    studentLevel: 'Aluno Elite',
     avatarUrl: null,
   });
   readonly status = signal<string | null>(null);
@@ -97,6 +133,8 @@ export class PortalDataService {
   readonly pixModalOpen = signal(false);
   readonly pixStatus = signal<string | null>(null);
   readonly purchases = signal<Purchase[]>([]);
+  /** Incrementado a cada sincronização de progresso (UI reativa). */
+  readonly progressTick = signal(0);
 
   readonly activeCourses = computed(() =>
     this.enrollments().map((enrollment) => {
@@ -164,10 +202,62 @@ export class PortalDataService {
         })),
       );
     } catch {
-      this.error.set('Could not load portal data. Ensure backend is running on port 8000.');
+      this.error.set('Não foi possível carregar os dados. Verifique se o backend está em execução na porta 8000.');
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  /** Atualiza matrículas/progresso do servidor sem recarregar o portal inteiro. */
+  async refreshEnrollments(): Promise<void> {
+    if (!this.auth.token()) return;
+    try {
+      const enrollments = await firstValueFrom(
+        this.http.get<Array<{ id: number; user_id: number; course_id: number; progress_percentage: number; last_accessed: string }>>(
+          `${this.apiUrl}/enrollments`,
+        ),
+      );
+      this.enrollments.set(
+        enrollments.map((item) => ({
+          id: item.id,
+          userId: item.user_id,
+          courseId: item.course_id,
+          progressPercentage: item.progress_percentage,
+          lastAccessed: item.last_accessed,
+        })),
+      );
+      this.progressTick.update((n) => n + 1);
+    } catch {
+      // Mantém dados locais se a rede falhar.
+    }
+  }
+
+  /** Painel: matrículas + progresso calculado por capítulo (tempo real). */
+  async refreshDashboardCourseProgress(): Promise<void> {
+    if (!this.auth.token() || this.auth.isContentManager()) return;
+
+    await this.refreshEnrollments();
+    const enrolled = [...this.enrollments()];
+    if (enrolled.length === 0) return;
+
+    const bundles = await Promise.all(
+      enrolled.map((item) => this.loadCourseLessonProgress(item.courseId)),
+    );
+
+    for (let i = 0; i < enrolled.length; i++) {
+      const bundle = bundles[i];
+      if (!bundle) continue;
+      if (bundle.course_progress !== enrolled[i].progressPercentage) {
+        this.applyCourseProgressForCourse(enrolled[i].courseId, bundle.course_progress);
+      }
+    }
+  }
+
+  private async syncProgressFromServer(courseId: number, fallbackCourseProgress?: number): Promise<void> {
+    if (typeof fallbackCourseProgress === 'number') {
+      this.applyCourseProgressForCourse(courseId, fallbackCourseProgress);
+    }
+    await this.refreshEnrollments();
   }
 
   async enrollInCourse(courseId: number): Promise<void> {
@@ -186,7 +276,20 @@ export class PortalDataService {
         await this.startPixCheckout(courseId);
         return;
       }
-      this.error.set('Enrollment failed.');
+      this.error.set('Não foi possível concluir a matrícula no curso.');
+    }
+  }
+
+  async cancelEnrollment(enrollmentId: number): Promise<boolean> {
+    this.error.set(null);
+    try {
+      await firstValueFrom(this.http.delete(`${this.apiUrl}/enrollments/${enrollmentId}`));
+      await this.refreshPortalData();
+      this.status.set('Matrícula removida com sucesso.');
+      return true;
+    } catch {
+      this.error.set('Não foi possível remover a matrícula.');
+      return false;
     }
   }
 
@@ -199,8 +302,15 @@ export class PortalDataService {
       );
       this.pixCheckout.set(checkout);
       this.pixStatus.set('Aguardando pagamento...');
-    } catch {
-      this.error.set('Não foi possível gerar o PIX. Tente novamente.');
+    } catch (err: unknown) {
+      const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((item) => (item as { msg?: string }).msg).filter(Boolean).join(' ')
+            : null;
+      this.error.set(message || 'Não foi possível gerar o PIX. Tente novamente.');
       this.pixCheckout.set(null);
       this.pixStatus.set(null);
     }
@@ -215,12 +325,11 @@ export class PortalDataService {
           this.http.get<{ id: number; status: string; course_id: number }>(`${this.apiUrl}/purchases/${purchaseId}`),
         );
         if (purchase.status === 'paid') {
-          this.pixStatus.set('Pagamento aprovado! Finalizando matrícula...');
+          this.pixStatus.set('Pagamento confirmado! Comprovante disponível no seu painel.');
+          await this.refreshPortalData();
+          await this.refreshPurchases();
           this.pixModalOpen.set(false);
           this.pixCheckout.set(null);
-          this.pixStatus.set(null);
-          // Tenta matricular novamente
-          await this.enrollInCourse(purchase.course_id);
           return;
         }
       } catch {
@@ -233,6 +342,37 @@ export class PortalDataService {
     }
   }
 
+  async confirmPayment(purchaseId: number): Promise<boolean> {
+    this.error.set(null);
+    this.pixStatus.set('Confirmando pagamento...');
+    try {
+      const purchase = await firstValueFrom(
+        this.http.post<Purchase>(`${this.apiUrl}/purchases/${purchaseId}/confirm-payment`, {}),
+      );
+      const checkout = this.pixCheckout();
+      if (checkout) {
+        this.pixCheckout.set({
+          ...checkout,
+          purchase: {
+            id: purchase.id,
+            status: purchase.status,
+            course_id: purchase.course_id,
+          },
+        });
+      }
+      await this.refreshPortalData();
+      await this.refreshPurchases();
+      this.pixStatus.set('Pagamento confirmado! Comprovante enviado no seu chat e painel.');
+      return true;
+    } catch (err: unknown) {
+      const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+      const message = typeof detail === 'string' ? detail : null;
+      this.error.set(message || 'Não foi possível confirmar o pagamento.');
+      this.pixStatus.set(null);
+      return false;
+    }
+  }
+
   async refreshPurchases(): Promise<void> {
     try {
       const purchases = await firstValueFrom(
@@ -241,6 +381,36 @@ export class PortalDataService {
       this.purchases.set(purchases);
     } catch {
       this.error.set('Não foi possível carregar seus pagamentos.');
+    }
+  }
+
+  printPurchaseReceipt(purchase: Purchase, courseTitle: string): boolean {
+    if (purchase.status !== 'paid') {
+      this.error.set('Só é possível imprimir comprovante de compras pagas.');
+      return false;
+    }
+    const receipt = purchaseToReceiptData(purchase, this.student(), courseTitle);
+    const opened = printPaymentReceipt(receipt);
+    if (!opened) {
+      this.error.set('Permita pop-ups neste site para imprimir o comprovante.');
+      return false;
+    }
+    this.error.set(null);
+    return true;
+  }
+
+  async deletePurchase(purchaseId: number): Promise<boolean> {
+    this.error.set(null);
+    try {
+      await firstValueFrom(this.http.delete(`${this.apiUrl}/purchases/${purchaseId}`));
+      this.purchases.update((list) => list.filter((item) => item.id !== purchaseId));
+      this.status.set('Compra removida.');
+      return true;
+    } catch (err: unknown) {
+      const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+      const message = typeof detail === 'string' ? detail : null;
+      this.error.set(message || 'Não foi possível remover a compra.');
+      return false;
     }
   }
 
@@ -257,7 +427,7 @@ export class PortalDataService {
       );
       await this.refreshPortalData();
     } catch {
-      this.error.set('Progress update failed.');
+      this.error.set('Não foi possível atualizar o progresso.');
     }
   }
 
@@ -328,6 +498,9 @@ export class PortalDataService {
   }
 
   async refreshMessages(): Promise<void> {
+    if (!this.auth.isAuthenticated() || !this.auth.isStudent()) {
+      return;
+    }
     try {
       const messages = await firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/messages`));
       this.messages.set(
@@ -352,6 +525,83 @@ export class PortalDataService {
     localStorage.setItem(this.lastSeenMessageKey(userId), String(latestId));
   }
 
+  async loadLessonQuiz(lessonId: number): Promise<ChapterQuizQuestion[]> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ lesson_id: number; questions: ChapterQuizQuestion[] }>(
+          `${this.apiUrl}/lessons/${lessonId}/quiz`,
+        ),
+      );
+      return response.questions;
+    } catch {
+      this.error.set('Não foi possível carregar a avaliação deste capítulo.');
+      return [];
+    }
+  }
+
+  async submitLessonQuiz(
+    lessonId: number,
+    courseId: number,
+    answers: number[],
+  ): Promise<ChapterQuizSubmitResult | null> {
+    this.error.set(null);
+    try {
+      const result = await firstValueFrom(
+        this.http.post<ChapterQuizSubmitResult>(`${this.apiUrl}/lessons/${lessonId}/quiz/submit`, {
+          answers,
+        }),
+      );
+      await this.syncProgressFromServer(courseId, result.course_progress);
+      return result;
+    } catch (err) {
+      const detail = (err as { error?: { detail?: string } })?.error?.detail;
+      this.error.set(typeof detail === 'string' ? detail : 'Não foi possível enviar a avaliação.');
+      return null;
+    }
+  }
+
+  async loadLessonProgress(lessonId: number): Promise<LessonProgress | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<LessonProgress>(`${this.apiUrl}/lessons/${lessonId}/progress`),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async loadCourseLessonProgress(courseId: number): Promise<CourseLessonProgressBundle | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<CourseLessonProgressBundle>(`${this.apiUrl}/courses/${courseId}/lesson-progress`),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async markLessonVideoComplete(lessonId: number, courseId: number): Promise<LessonProgress | null> {
+    this.error.set(null);
+    try {
+      const result = await firstValueFrom(
+        this.http.post<LessonProgress>(`${this.apiUrl}/lessons/${lessonId}/progress/video`, {}),
+      );
+      await this.syncProgressFromServer(courseId, result.course_progress);
+      return result;
+    } catch (err) {
+      const detail = (err as { error?: { detail?: string } })?.error?.detail;
+      this.error.set(typeof detail === 'string' ? detail : 'Não foi possível registrar o vídeo assistido.');
+      return null;
+    }
+  }
+
+  applyCourseProgressForCourse(courseId: number, progress: number): void {
+    this.enrollments.update((list) =>
+      list.map((item) => (item.courseId === courseId ? { ...item, progressPercentage: progress } : item)),
+    );
+    this.progressTick.update((n) => n + 1);
+  }
+
   async loadLessonsForCourse(courseId: number): Promise<void> {
     try {
       const lessons = await firstValueFrom(
@@ -369,7 +619,7 @@ export class PortalDataService {
         })),
       );
     } catch {
-      this.error.set('Could not load lessons.');
+      this.error.set('Não foi possível carregar as aulas.');
     }
   }
 
@@ -380,9 +630,9 @@ export class PortalDataService {
   clear(): void {
     this.student.set({
       id: 0,
-      name: 'Loading student...',
+      name: 'Carregando...',
       email: '',
-      studentLevel: 'Gold Scholar',
+      studentLevel: 'Aluno Elite',
       avatarUrl: null,
     });
     this.status.set(null);

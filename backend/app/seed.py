@@ -11,7 +11,7 @@ def seed_data(db: Session) -> None:
             name="Super Admin",
             email="admin@starke.academy",
             password_hash=get_password_hash("admin123"),
-            student_level="Super Admin",
+            student_level="Administrador",
             avatar_url="https://example.com/admin-avatar.jpg",
             is_admin=True,
         )
@@ -24,7 +24,7 @@ def seed_data(db: Session) -> None:
             name="Instrutor Starke",
             email="instructor@starke.academy",
             password_hash=get_password_hash("instructor123"),
-            student_level="Instructor",
+            student_level="Instrutor",
             is_admin=False,
             is_instructor=True,
         )
@@ -38,7 +38,7 @@ def seed_data(db: Session) -> None:
         name="Evelyn Costa",
         email="evelyn@starke.academy",
         password_hash=get_password_hash("elite123"),
-        student_level="Platinum Scholar",
+        student_level="Aluno Platina",
         avatar_url="https://example.com/avatar.jpg",
         is_admin=False,
     )
@@ -46,16 +46,16 @@ def seed_data(db: Session) -> None:
 
     courses = [
         Course(
-            title="AI Product Architecture",
-            description="Design, ship, and govern advanced AI products.",
+            title="Arquitetura de Produtos com IA",
+            description="Projete, lance e governe produtos avançados com inteligência artificial.",
             price=1299.0,
-            category="Technology",
+            category="Tecnologia",
             rating=4.9,
             hero_image_url="https://images.unsplash.com/photo-1518770660439-4636190af475",
         ),
         Course(
-            title="Premium Brand Positioning",
-            description="Dominate premium market segments with clear positioning.",
+            title="Posicionamento de Marca Premium",
+            description="Domine segmentos premium com posicionamento claro e estratégico.",
             price=890.0,
             category="Marketing",
             rating=4.8,
@@ -68,17 +68,17 @@ def seed_data(db: Session) -> None:
     lessons = [
         Lesson(
             course_id=courses[0].id,
-            module_name="Module 1",
-            title="Vision and Opportunity Mapping",
+            module_name="Módulo 1",
+            title="Visão e mapeamento de oportunidades",
             video_url="https://example.com/video-1",
-            content_md="# Vision\nDefine elite outcomes and strategy.",
+            content_md="# Visão\nDefina resultados de elite e estratégia.",
         ),
         Lesson(
             course_id=courses[0].id,
-            module_name="Module 2",
-            title="Platform and Data Design",
+            module_name="Módulo 2",
+            title="Plataforma e design de dados",
             video_url="https://example.com/video-2",
-            content_md="# Data\nModel secure and scalable data flows.",
+            content_md="# Dados\nModele fluxos de dados seguros e escaláveis.",
         ),
     ]
     db.add_all(lessons)

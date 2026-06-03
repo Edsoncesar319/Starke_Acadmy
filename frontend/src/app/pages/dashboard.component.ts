@@ -1,40 +1,73 @@
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { NgClass } from '@angular/common';
+import { Component, DestroyRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs';
 import { PortalDataService } from '../services/portal-data.service';
+import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/payment-receipt.util';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
+  imports: [NgClass],
   template: `
     <section class="space-y-6">
       <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
-        <p class="text-gold-300">Welcome back, {{ data.student().name }}</p>
-        <h3 class="mt-2 text-2xl font-semibold">Pending Tasks: {{ pendingTasks() }}</h3>
+        <p class="text-gold-300">Bem-vindo(a) de volta, {{ data.student().name }}</p>
+        <h3 class="mt-2 text-2xl font-semibold">Tarefas pendentes: {{ pendingTasks() }}</h3>
+        @if (data.status()) {
+          <p class="mt-2 text-sm text-gold-300">{{ data.status() }}</p>
+        }
         @if (data.error()) {
           <p class="mt-2 text-sm text-red-300">{{ data.error() }}</p>
         }
       </div>
 
       <div>
-        <h4 class="mb-3 text-lg font-medium text-gold-300">Active Courses</h4>
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          @for (item of data.activeCourses(); track item.id) {
-            <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-              <p class="text-sm text-slate-300">{{ item.course?.title }}</p>
-              <div class="mt-3 flex items-center gap-3">
-                <div class="relative h-14 w-14 rounded-full border-4 border-gold-500/30">
-                  <div
-                    class="absolute inset-0 rounded-full border-4 border-gold-500"
-                    [style.clip-path]="'inset(' + (100 - item.progressPercentage) + '% 0 0 0)'"
-                  ></div>
+        <h4 class="mb-3 text-lg font-medium text-gold-300">Cursos ativos</h4>
+        @if (activeCoursesView().length === 0) {
+          <p class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 px-4 py-6 text-center text-sm text-slate-400">
+            Você não está matriculado em nenhum curso. Explore o catálogo para começar.
+          </p>
+        } @else {
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            @for (item of activeCoursesView(); track item.id) {
+              <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p class="text-sm font-medium text-slate-200">{{ item.course?.title }}</p>
+                    <span
+                      class="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                      [ngClass]="courseStatusClass(item.progressPercentage)"
+                    >
+                      {{ courseStatusLabel(item.progressPercentage) }}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    (click)="removeEnrollment(item)"
+                    [disabled]="removingEnrollmentId() === item.id"
+                    class="rounded border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                  >
+                    {{ removingEnrollmentId() === item.id ? 'Removendo...' : 'Remover matrícula' }}
+                  </button>
                 </div>
-                <div>
-                  <p class="text-xl font-semibold text-gold-300">{{ item.progressPercentage }}%</p>
-                  <p class="text-xs text-slate-400">Completed</p>
+                <div class="mt-3 flex items-center gap-3">
+                  <div class="relative h-14 w-14 rounded-full border-4 border-gold-500/30">
+                    <div
+                      class="absolute inset-0 rounded-full border-4 border-gold-500"
+                      [style.clip-path]="'inset(' + (100 - item.progressPercentage) + '% 0 0 0)'"
+                    ></div>
+                  </div>
+                  <div>
+                    <p class="text-xl font-semibold text-gold-300">{{ item.progressPercentage }}%</p>
+                    <p class="text-xs text-slate-400">Progresso</p>
+                  </div>
                 </div>
-              </div>
-            </article>
-          }
-        </div>
+              </article>
+            }
+          </div>
+        }
       </div>
 
       <section class="chat-panel">
@@ -64,6 +97,15 @@ import { PortalDataService } from '../services/portal-data.service';
                       <p class="mt-1 text-xs text-gold-400/80">{{ courseTitle(message.courseId) }}</p>
                     }
                     <p class="mt-2 whitespace-pre-wrap leading-relaxed">{{ message.details }}</p>
+                    @if (isReceiptMessage(message.subject)) {
+                      <button
+                        type="button"
+                        (click)="printReceiptFromMessage(message)"
+                        class="mt-3 rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        Imprimir comprovante
+                      </button>
+                    }
                   </article>
                   <p class="chat-meta">{{ formatTime(message.createdAt) }}</p>
                 </div>
@@ -73,21 +115,21 @@ import { PortalDataService } from '../services/portal-data.service';
         </div>
 
         <footer class="chat-composer">
-          <p class="text-center text-xs text-slate-500">Este chat é somente leitura. Responda pelo Support Center se precisar.</p>
+          <p class="text-center text-xs text-slate-500">Este chat é somente leitura. Use a Central de Ajuda se precisar de suporte.</p>
         </footer>
       </section>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-          <h4 class="mb-3 text-gold-300">Upcoming Live</h4>
+          <h4 class="mb-3 text-gold-300">Próximas ao vivo</h4>
           <ul class="space-y-2 text-sm text-slate-300">
-            <li>Today 19:00 - Mentorship Office Hour</li>
-            <li>Tomorrow 20:30 - Product Clinic</li>
-            <li>Saturday 10:00 - Elite Networking</li>
+            <li>Hoje 19:00 — Mentoria ao vivo</li>
+            <li>Amanhã 20:30 — Clínica de produto</li>
+            <li>Sábado 10:00 — Networking Elite</li>
           </ul>
         </div>
         <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-          <h4 class="mb-3 text-gold-300">Explore Niches</h4>
+          <h4 class="mb-3 text-gold-300">Explore nichos</h4>
           <div class="grid grid-cols-3 gap-2 text-xs text-slate-300">
             @for (niche of niches; track niche) {
               <span class="rounded-lg border border-gold-500/20 bg-obsidian-600/60 px-3 py-2 text-center">{{ niche }}</span>
@@ -98,18 +140,115 @@ import { PortalDataService } from '../services/portal-data.service';
     </section>
   `,
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
+  private static readonly PROGRESS_SYNC_MS = 2000;
+
   readonly data = inject(PortalDataService);
-  readonly pendingTasks = computed(() => this.data.activeCourses().filter((item) => item.progressPercentage < 100).length);
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  readonly removingEnrollmentId = signal<number | null>(null);
+  private progressTimer?: ReturnType<typeof setInterval>;
+  private readonly onVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible') {
+      void this.syncCourseProgress();
+    }
+  };
+  private readonly onWindowFocus = (): void => {
+    void this.syncCourseProgress();
+  };
+
+  readonly pendingTasks = computed(() => {
+    this.data.progressTick();
+    return this.data.activeCourses().filter((item) => item.progressPercentage < 100).length;
+  });
+
+  readonly activeCoursesView = computed(() => {
+    this.data.progressTick();
+    return this.data.activeCourses();
+  });
   readonly chatMessages = computed(() =>
     [...this.data.messages()].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     ),
   );
-  readonly niches = ['Technology', 'Business', 'Health', 'Design', 'Finance', 'Leadership'];
+  readonly niches = ['Tecnologia', 'Negócios', 'Saúde', 'Design', 'Finanças', 'Liderança'];
+  readonly isReceiptMessage = isReceiptMessage;
 
   ngOnInit(): void {
     this.data.markMessagesAsSeen();
+    void this.data.refreshPurchases();
+    void this.syncCourseProgress();
+
+    this.progressTimer = setInterval(() => void this.syncCourseProgress(), DashboardComponent.PROGRESS_SYNC_MS);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('focus', this.onWindowFocus);
+
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => {
+        if (this.router.url.split('?')[0] === '/dashboard') {
+          void this.syncCourseProgress();
+        }
+      });
+  }
+
+  ngOnDestroy(): void {
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+    }
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('focus', this.onWindowFocus);
+  }
+
+  private async syncCourseProgress(): Promise<void> {
+    await this.data.refreshDashboardCourseProgress();
+  }
+
+  courseStatusLabel(progress: number): string {
+    if (progress >= 100) return 'Concluído';
+    if (progress > 0) return 'Em andamento';
+    return 'Não iniciado';
+  }
+
+  courseStatusClass(progress: number): string {
+    if (progress >= 100) return 'bg-emerald-500/20 text-emerald-300';
+    if (progress > 0) return 'bg-gold-500/20 text-gold-300';
+    return 'bg-slate-500/20 text-slate-400';
+  }
+
+  async removeEnrollment(item: { id: number; course?: { title?: string } }): Promise<void> {
+    const courseName = item.course?.title ?? 'este curso';
+    const confirmed = window.confirm(
+      `Deseja remover sua matrícula em "${courseName}"?\n\nVocê perderá o acesso às aulas deste curso. Poderá se matricular novamente pelo catálogo.`,
+    );
+    if (!confirmed) return;
+
+    this.removingEnrollmentId.set(item.id);
+    await this.data.cancelEnrollment(item.id);
+    this.removingEnrollmentId.set(null);
+  }
+
+  printReceiptFromMessage(message: { subject: string; courseId: number | null }): void {
+    const purchaseId = findPurchaseIdFromReceiptSubject(message.subject);
+    if (!purchaseId) {
+      this.data.error.set('Não foi possível identificar a compra deste comprovante.');
+      return;
+    }
+    const purchase = this.data.purchases().find((p) => p.id === purchaseId);
+    if (!purchase || purchase.status !== 'paid') {
+      this.data.error.set('Comprovante indisponível para impressão. Atualize a página de pagamentos.');
+      void this.data.refreshPurchases().then(() => {
+        const refreshed = this.data.purchases().find((p) => p.id === purchaseId);
+        if (refreshed?.status === 'paid') {
+          this.data.printPurchaseReceipt(refreshed, this.courseTitle(refreshed.course_id));
+        }
+      });
+      return;
+    }
+    this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
   }
 
   courseTitle(courseId: number | null): string {

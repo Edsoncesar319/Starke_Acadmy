@@ -1,14 +1,31 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  QueryList,
+  ViewChildren,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminLesson, AdminService } from '../services/admin.service';
 import { AuthService } from '../services/auth.service';
-import { Lesson, PortalDataService } from '../services/portal-data.service';
+import {
+  ChapterQuizQuestion,
+  Lesson,
+  LessonProgress,
+  PortalDataService,
+} from '../services/portal-data.service';
+import { LessonQuizEditorComponent } from '../shared/lesson-quiz-editor.component';
+import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 
 @Component({
   selector: 'app-lesson-player',
   standalone: true,
-  imports: [NgClass, FormsModule],
+  imports: [NgClass, FormsModule, LessonQuizEditorComponent],
   template: `
     <section class="space-y-6">
       @if (data.error()) {
@@ -26,7 +43,7 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
           <h2 class="text-lg font-semibold text-gold-300">Gerenciar vídeo-aulas</h2>
           <p class="mt-1 text-sm text-slate-400">
             @if (isAdmin()) {
-              Super Admin: envie vídeos e cadastre lições para os cursos.
+              Administrador: envie vídeos e cadastre lições para os cursos.
             } @else {
               Instrutor: envie vídeos e cadastre lições dos cursos.
             }
@@ -106,7 +123,8 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                 <p class="text-sm text-slate-500">Nenhuma aula neste curso.</p>
               }
               @for (lesson of admin.lessons(); track lesson.id) {
-                <form class="space-y-2 rounded-lg border border-gold-500/20 p-3" (ngSubmit)="saveAdminLesson(lesson)">
+                <div class="space-y-2 rounded-lg border border-gold-500/20 p-3">
+                <form class="space-y-2" (ngSubmit)="saveAdminLesson(lesson)">
                   <input
                     [(ngModel)]="lesson.module_name"
                     [name]="'mod-' + lesson.id"
@@ -143,9 +161,16 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                   @if (lesson.pdf_url) {
                     <p class="truncate text-xs text-slate-400">{{ lesson.pdf_url }}</p>
                   }
-                  <div class="flex gap-2">
+                  <div class="flex flex-wrap gap-2">
                     <button type="submit" class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300">
                       Salvar
+                    </button>
+                    <button
+                      type="button"
+                      (click)="toggleQuizEditor(lesson.id)"
+                      class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300"
+                    >
+                      {{ editingQuizLessonId() === lesson.id ? 'Fechar questões' : 'Editar 10 questões' }}
                     </button>
                     <button
                       type="button"
@@ -156,6 +181,36 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                     </button>
                   </div>
                 </form>
+                  @if (editingQuizLessonId() === lesson.id) {
+                    <app-lesson-quiz-editor
+                      #activeQuizEditor
+                      [lessonId]="lesson.id"
+                      [lessonTitle]="lesson.title"
+                    />
+                    <div class="sticky bottom-0 z-20 mt-2 flex flex-wrap gap-2 rounded-lg border border-gold-500/30 bg-obsidian-900/95 p-3 backdrop-blur">
+                      <button
+                        type="button"
+                        (click)="saveQuizForLesson(lesson.id, activeQuizEditor)"
+                        [disabled]="quizSavingId() === lesson.id || activeQuizEditor.isSaving()"
+                        class="rounded-lg border-2 border-gold-500 bg-gold-500/25 px-4 py-2 text-sm font-semibold text-gold-100 hover:bg-gold-500/40 disabled:opacity-60"
+                      >
+                        {{
+                          quizSavingId() === lesson.id || activeQuizEditor.isSaving()
+                            ? 'Salvando questões...'
+                            : 'Salvar 10 questões'
+                        }}
+                      </button>
+                      <button
+                        type="button"
+                        (click)="activeQuizEditor.reload()"
+                        [disabled]="quizSavingId() === lesson.id"
+                        class="rounded border border-slate-500/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-500/10 disabled:opacity-60"
+                      >
+                        Recarregar do servidor
+                      </button>
+                    </div>
+                  }
+                </div>
               }
             </div>
           </div>
@@ -193,6 +248,11 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
             >
               <span class="block text-gold-300/90">{{ lesson.moduleName }}</span>
               <span class="text-xs text-slate-400">{{ lesson.title }}</span>
+              @if (auth.isStudent()) {
+                <span class="mt-1 block text-[10px] text-slate-500">
+                  {{ lessonCourseContribution(lesson.id) }}/10% do curso
+                </span>
+              }
             </button>
           }
         </aside>
@@ -235,15 +295,53 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
                     Baixar conteúdo (PDF)
                   </a>
                 }
-                @if (courseProgress() !== null) {
-                  <p class="mt-2 text-xs text-slate-400">Progresso do curso: {{ courseProgress() }}%</p>
+                @if (auth.isStudent() && chapterProgressInfo(); as progress) {
+                  <div class="mt-3 rounded-lg border border-gold-500/15 bg-obsidian-800/50 p-3 text-xs text-slate-300">
+                    <p class="font-medium text-gold-300">
+                      Este capítulo: {{ progress.courseContribution }}/10% do curso
+                    </p>
+                    <ul class="mt-2 space-y-1">
+                      <li [class.text-emerald-300]="progress.videoDone">
+                        {{ progress.videoDone ? '✓' : '○' }} Vídeo/material (+5% no curso)
+                      </li>
+                      <li [class.text-emerald-300]="progress.quizDone">
+                        {{ progress.quizDone ? '✓' : '○' }} Avaliação aprovada (+5% no curso)
+                      </li>
+                    </ul>
+                    @if (courseProgress() !== null) {
+                      <p class="mt-2 text-slate-400">Progresso total do curso: {{ courseProgress() }}%</p>
+                    }
+                  </div>
+                }
+                @if (auth.isStudent() && currentLesson(); as lesson) {
+                  @if (!hasPlayableVideo(lesson.videoUrl)) {
+                    <button
+                      type="button"
+                      (click)="markMaterialComplete()"
+                      [disabled]="lessonProgressMap()[lesson.id]?.video_completed"
+                      class="mt-3 rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+                    >
+                      {{
+                        lessonProgressMap()[lesson.id]?.video_completed
+                          ? 'Material concluído (+5% no curso)'
+                          : 'Marcar material como concluído (+5% no curso)'
+                      }}
+                    </button>
+                  }
                 }
               </article>
               <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
                 <h5 class="text-gold-300">Avaliação do capítulo</h5>
-                <p class="mt-1 text-xs text-slate-400">10 questões. Aprovação mínima: 80% (8 acertos).</p>
+                <p class="mt-1 text-xs text-slate-400">
+                  10 questões · aprovação mínima 80% · +5% no progresso do curso ao aprovar.
+                </p>
+                @if (quizLoading()) {
+                  <p class="mt-3 text-xs text-slate-500">Carregando avaliação...</p>
+                } @else if (chapterQuiz().length === 0) {
+                  <p class="mt-3 text-xs text-slate-500">Avaliação ainda não configurada para este capítulo.</p>
+                }
                 <div class="mt-3 max-h-80 space-y-3 overflow-auto pr-1">
-                  @for (question of chapterQuiz; track question.prompt; let qIdx = $index) {
+                  @for (question of chapterQuiz(); track question.position; let qIdx = $index) {
                     <div class="rounded-lg border border-gold-500/15 p-2">
                       <p class="text-xs text-slate-200">{{ qIdx + 1 }}. {{ question.prompt }}</p>
                       <div class="mt-2 space-y-1">
@@ -291,8 +389,13 @@ import { Lesson, PortalDataService } from '../services/portal-data.service';
     </section>
   `,
 })
-export class LessonPlayerComponent implements OnInit {
+export class LessonPlayerComponent implements OnInit, OnDestroy {
+  @ViewChildren('activeQuizEditor') quizEditors!: QueryList<LessonQuizEditorComponent>;
+
   readonly data = inject(PortalDataService);
+  private readonly quizDraft = inject(LessonQuizDraftService);
+  private progressTimer?: ReturnType<typeof setInterval>;
+  readonly quizSavingId = signal<number | null>(null);
   readonly admin = inject(AdminService);
   readonly auth = inject(AuthService);
 
@@ -304,59 +407,10 @@ export class LessonPlayerComponent implements OnInit {
   readonly quizAnswers = signal<Record<number, number[]>>({});
   readonly quizResult = signal<{ score: number; passed: boolean } | null>(null);
   readonly quizMessage = signal<string | null>(null);
-
-  readonly chapterQuiz: { prompt: string; options: string[]; correctIndex: number }[] = [
-    {
-      prompt: 'Qual é a melhor atitude ao iniciar o estudo de um novo capítulo?',
-      options: ['Ignorar o objetivo', 'Definir objetivo claro', 'Estudar sem foco', 'Pular exemplos'],
-      correctIndex: 1,
-    },
-    {
-      prompt: 'Para fixar o conteúdo, a prática recomendada é:',
-      options: ['Apenas assistir', 'Repetir sem entender', 'Aplicar em exercícios', 'Memorizar sem contexto'],
-      correctIndex: 2,
-    },
-    {
-      prompt: 'Ao encontrar dificuldade em um tópico, o ideal é:',
-      options: ['Abandonar o capítulo', 'Rever o conceito-base', 'Ignorar e avançar', 'Trocar de curso'],
-      correctIndex: 1,
-    },
-    {
-      prompt: 'Qual estratégia melhora retenção de longo prazo?',
-      options: ['Revisão espaçada', 'Estudo único e longo', 'Sem anotações', 'Somente leitura passiva'],
-      correctIndex: 0,
-    },
-    {
-      prompt: 'No contexto do capítulo, exemplos práticos servem para:',
-      options: ['Confundir o aluno', 'Substituir teoria', 'Conectar teoria e aplicação', 'Aumentar tempo sem ganho'],
-      correctIndex: 2,
-    },
-    {
-      prompt: 'Ao final de cada seção, o aluno deve principalmente:',
-      options: ['Checar entendimento', 'Pular para prova', 'Encerrar sem revisão', 'Copiar tudo sem filtrar'],
-      correctIndex: 0,
-    },
-    {
-      prompt: 'Um bom indicador de domínio do capítulo é:',
-      options: ['Saber explicar o conteúdo', 'Apenas reconhecer termos', 'Ter visto o vídeo uma vez', 'Não errar nunca'],
-      correctIndex: 0,
-    },
-    {
-      prompt: 'Quando revisar erro em exercício, o foco correto é:',
-      options: ['Só ver o gabarito', 'Entender causa do erro', 'Refazer sem analisar', 'Ignorar o resultado'],
-      correctIndex: 1,
-    },
-    {
-      prompt: 'Para evoluir no capítulo, feedback deve ser:',
-      options: ['Específico e acionável', 'Genérico e vago', 'Raro e tardio', 'Sem relação com conteúdo'],
-      correctIndex: 0,
-    },
-    {
-      prompt: 'A melhor forma de concluir o capítulo é:',
-      options: ['Passar para o próximo sem validar', 'Atingir desempenho mínimo na avaliação', 'Assistir novamente sem prática', 'Parar no meio do conteúdo'],
-      correctIndex: 1,
-    },
-  ];
+  readonly chapterQuiz = signal<ChapterQuizQuestion[]>([]);
+  readonly quizLoading = signal(false);
+  readonly editingQuizLessonId = signal<number | null>(null);
+  readonly lessonProgressMap = signal<Record<number, LessonProgress>>({});
 
   newLesson = {
     module_name: '',
@@ -377,25 +431,63 @@ export class LessonPlayerComponent implements OnInit {
     this.lessons().find((lesson) => lesson.id === this.selectedLessonId()) ?? null,
   );
 
-  constructor() {
-    effect(() => {
-      if (this.isContentManager()) return;
-      const first = this.data.activeCourses()[0];
-      if (!first || this.selectedCourseId()) return;
-      this.selectedCourseId.set(first.courseId);
-      void this.data.loadLessonsForCourse(first.courseId);
-    });
+  readonly chapterProgressInfo = computed(() => {
+    this.data.progressTick();
+    const lessonId = this.selectedLessonId();
+    if (!lessonId || !this.auth.isStudent()) return null;
+    const progress = this.lessonProgressMap()[lessonId];
+    if (!progress) {
+      return { courseContribution: 0, videoDone: false, quizDone: false };
+    }
+    return {
+      courseContribution: progress.course_contribution ?? 0,
+      videoDone: progress.video_completed,
+      quizDone: progress.quiz_passed,
+    };
+  });
 
-    effect(() => {
-      const list = this.lessons();
-      if (list.length === 0) {
-        this.selectedLessonId.set(null);
-        return;
-      }
-      if (!list.some((lesson) => lesson.id === this.selectedLessonId())) {
-        this.selectedLessonId.set(list[0].id);
-      }
-    });
+  readonly courseProgress = computed(() => {
+    this.data.progressTick();
+    const courseId = this.selectedCourseId();
+    if (!courseId) return null;
+    return this.data.activeCourses().find((item) => item.courseId === courseId)?.progressPercentage ?? null;
+  });
+
+  constructor() {
+    effect(
+      () => {
+        if (this.isContentManager()) return;
+        const first = this.data.activeCourses()[0];
+        if (!first || this.selectedCourseId()) return;
+        this.selectedCourseId.set(first.courseId);
+        void this.data.loadLessonsForCourse(first.courseId);
+      },
+      { allowSignalWrites: true },
+    );
+
+    effect(
+      () => {
+        const list = this.lessons();
+        if (list.length === 0) {
+          this.selectedLessonId.set(null);
+          return;
+        }
+        if (!list.some((lesson) => lesson.id === this.selectedLessonId())) {
+          this.selectedLessonId.set(list[0].id);
+        }
+      },
+      { allowSignalWrites: true },
+    );
+
+    effect(
+      () => {
+        const lessonId = this.selectedLessonId();
+        if (!lessonId || !this.showStudentPlayer()) return;
+        void this.loadChapterQuiz(lessonId);
+        void this.loadChapterProgress(lessonId);
+      },
+      { allowSignalWrites: true },
+    );
   }
 
   showStudentPlayer(): boolean {
@@ -425,12 +517,51 @@ export class LessonPlayerComponent implements OnInit {
       this.selectedCourseId.set(first.courseId);
       await this.data.loadLessonsForCourse(first.courseId);
     }
+    await this.data.refreshEnrollments();
+    const courseId = this.selectedCourseId();
+    if (courseId) {
+      await this.loadAllCourseProgress(courseId);
+    }
+    this.progressTimer = setInterval(() => void this.pollProgress(), 3000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+    }
+  }
+
+  private async pollProgress(): Promise<void> {
+    if (!this.auth.isStudent()) return;
+    const courseId = this.selectedCourseId();
+    if (!courseId) return;
+    await this.loadAllCourseProgress(courseId);
   }
 
   onStudentCourseChange(): void {
     const courseId = this.selectedCourseId();
     if (!courseId) return;
     void this.data.loadLessonsForCourse(courseId);
+    void this.loadAllCourseProgress(courseId);
+  }
+
+  lessonCourseContribution(lessonId: number): number {
+    this.data.progressTick();
+    return this.lessonProgressMap()[lessonId]?.course_contribution ?? 0;
+  }
+
+  async loadAllCourseProgress(courseId: number): Promise<void> {
+    if (!this.auth.isStudent()) return;
+    const bundle = await this.data.loadCourseLessonProgress(courseId);
+    if (!bundle) return;
+
+    const map: Record<number, LessonProgress> = {};
+    for (const item of bundle.lessons) {
+      map[item.lesson_id] = { ...item, course_progress: bundle.course_progress };
+    }
+    this.lessonProgressMap.set(map);
+    this.data.applyCourseProgressForCourse(courseId, bundle.course_progress);
+    await this.data.refreshEnrollments();
   }
 
   async onAdminCourseChange(): Promise<void> {
@@ -443,6 +574,33 @@ export class LessonPlayerComponent implements OnInit {
     this.selectedLessonId.set(lessonId);
     this.quizResult.set(null);
     this.quizMessage.set(null);
+    if (this.showStudentPlayer()) {
+      void this.loadChapterQuiz(lessonId);
+      void this.loadChapterProgress(lessonId);
+    }
+  }
+
+  async loadChapterProgress(lessonId: number): Promise<void> {
+    if (!this.auth.isStudent()) return;
+    const progress = await this.data.loadLessonProgress(lessonId);
+    if (!progress) return;
+    this.lessonProgressMap.update((map) => ({ ...map, [lessonId]: progress }));
+    const courseId = this.selectedCourseId();
+    if (courseId) {
+      this.data.applyCourseProgressForCourse(courseId, progress.course_progress);
+      await this.data.refreshEnrollments();
+    }
+  }
+
+  toggleQuizEditor(lessonId: number): void {
+    this.editingQuizLessonId.update((current) => (current === lessonId ? null : lessonId));
+  }
+
+  async loadChapterQuiz(lessonId: number): Promise<void> {
+    this.quizLoading.set(true);
+    const questions = await this.data.loadLessonQuiz(lessonId);
+    this.chapterQuiz.set(questions);
+    this.quizLoading.set(false);
   }
 
   hasPlayableVideo(url: string): boolean {
@@ -455,15 +613,41 @@ export class LessonPlayerComponent implements OnInit {
     );
   }
 
-  courseProgress(): number | null {
+  async onVideoEnded(): Promise<void> {
+    if (!this.auth.isStudent()) return;
+    const lessonId = this.selectedLessonId();
     const courseId = this.selectedCourseId();
-    if (!courseId) return null;
-    return this.data.activeCourses().find((item) => item.courseId === courseId)?.progressPercentage ?? null;
+    if (!lessonId || !courseId) return;
+
+    const progress = await this.data.markLessonVideoComplete(lessonId, courseId);
+    if (progress) {
+      this.lessonProgressMap.update((map) => ({ ...map, [lessonId]: progress }));
+      await this.data.refreshEnrollments();
+      this.quizMessage.set(
+        progress.course_contribution >= 10
+          ? `Capítulo completo (+10% no curso). Progresso total: ${progress.course_progress}%.`
+          : `Vídeo registrado (+5% no curso). Progresso total: ${progress.course_progress}%. Faça a avaliação para +5%.`,
+      );
+      return;
+    }
+    this.quizMessage.set('Conclua a avaliação com no mínimo 80% para ganhar +5% no curso.');
   }
 
-  onVideoEnded(): void {
-    if (!this.auth.isStudent()) return;
-    this.quizMessage.set('Para atingir 100% deste capítulo, conclua a avaliação com no mínimo 80%.');
+  async markMaterialComplete(): Promise<void> {
+    const lessonId = this.selectedLessonId();
+    const courseId = this.selectedCourseId();
+    if (!lessonId || !courseId || !this.auth.isStudent()) return;
+
+    const progress = await this.data.markLessonVideoComplete(lessonId, courseId);
+    if (progress) {
+      this.lessonProgressMap.update((map) => ({ ...map, [lessonId]: progress }));
+      await this.data.refreshEnrollments();
+      this.quizMessage.set(
+        progress.course_contribution >= 10
+          ? `Capítulo completo (+10% no curso). Progresso total: ${progress.course_progress}%.`
+          : `Material concluído (+5% no curso). Progresso total: ${progress.course_progress}%. Faça a avaliação para +5%.`,
+      );
+    }
   }
 
   setQuizAnswer(questionIndex: number, optionIndex: number): void {
@@ -487,26 +671,34 @@ export class LessonPlayerComponent implements OnInit {
     if (!lessonId || !courseId) return;
 
     const answers = this.quizAnswers()[lessonId] ?? [];
-    if (answers.length < this.chapterQuiz.length || answers.some((answer) => answer < 0)) {
+    if (answers.length < this.chapterQuiz().length || answers.some((answer) => answer < 0)) {
       this.quizMessage.set('Responda as 10 questões antes de finalizar a avaliação.');
       return;
     }
 
-    const score = this.chapterQuiz.reduce((acc, question, index) => {
-      return acc + (answers[index] === question.correctIndex ? 1 : 0);
-    }, 0);
-    const passed = score >= 8;
-    this.quizResult.set({ score, passed });
+    const result = await this.data.submitLessonQuiz(lessonId, courseId, answers);
+    if (!result) return;
 
-    if (passed) {
-      await this.data.updateProgress(courseId, 100);
-      this.quizMessage.set('Aprovado! Capítulo concluído com 100% de progresso.');
+    this.quizResult.set({ score: result.score, passed: result.passed });
+
+    if (result.passed) {
+      await this.loadChapterProgress(lessonId);
+      await this.loadAllCourseProgress(courseId);
+      if (result.course_contribution >= 10) {
+        this.quizMessage.set(
+          `Aprovado! Capítulo completo (+10% no curso). Progresso total: ${result.course_progress}%.`,
+        );
+      } else {
+        this.quizMessage.set(
+          `Aprovado (+5% no curso). Progresso total: ${result.course_progress}%. Assista ao vídeo ou marque o material para +5%.`,
+        );
+      }
       return;
     }
 
-    const current = this.courseProgress() ?? 0;
-    await this.data.updateProgress(courseId, Math.min(current, 90));
-    this.quizMessage.set('Você precisa de 80% (8/10). Revise o capítulo e tente novamente.');
+    this.quizMessage.set(
+      `Você precisa de 80% (${result.minimum_score}/${result.total}). Revise o capítulo e tente novamente.`,
+    );
   }
 
   async onNewLessonVideo(event: Event): Promise<void> {
@@ -581,7 +773,40 @@ export class LessonPlayerComponent implements OnInit {
     this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
   }
 
+  async saveQuizForLesson(lessonId: number, editor?: LessonQuizEditorComponent): Promise<void> {
+    this.quizSavingId.set(lessonId);
+    this.admin.error.set(null);
+    try {
+      if (editor) {
+        const ok = await editor.saveIfValid();
+        if (!ok) return;
+        return;
+      }
+      const draft = this.quizDraft.get(lessonId);
+      const validationError = draft ? this.quizDraft.validate(draft) : 'Abra o editor e carregue as questões.';
+      if (validationError) {
+        this.admin.error.set(validationError);
+        return;
+      }
+      await this.admin.saveLessonQuiz(lessonId, this.quizDraft.buildPayload(draft!));
+    } finally {
+      this.quizSavingId.set(null);
+    }
+  }
+
   async saveAdminLesson(lesson: AdminLesson): Promise<void> {
+    if (this.editingQuizLessonId() === lesson.id) {
+      const editor = this.quizEditors?.find((item) => item.lessonId() === lesson.id);
+      if (editor) {
+        const quizSaved = await editor.saveIfValid();
+        if (!quizSaved) {
+          this.admin.error.set(
+            this.admin.error() ?? 'Corrija as questões antes de salvar a aula (ou use Salvar 10 questões).',
+          );
+          return;
+        }
+      }
+    }
     await this.admin.updateLesson(lesson);
   }
 

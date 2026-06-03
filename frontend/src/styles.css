@@ -23,6 +23,36 @@ body {
   @apply bg-obsidian-900 text-slate-100;
 }
 
+/* Ícones Material Symbols no menu lateral */
+.mat-icon,
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.nav-item-icon {
+  @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gold-500/15 bg-obsidian-800/80 text-gold-400 transition group-hover:border-gold-500/30;
+}
+
+.nav-item-icon .mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
 h1,
 h2,
 h3 {

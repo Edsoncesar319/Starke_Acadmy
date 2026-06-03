@@ -55,7 +55,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
             name="email"
             required
             class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
-            placeholder="Email"
+            placeholder="E-mail"
           />
           <input
             type="password"
@@ -154,8 +154,8 @@ export class MatriculaComponent {
             : null
           : null;
       this.error.set(
-        detail === 'Email already registered'
-          ? 'Este email já está cadastrado. Faça login ou use outro email.'
+        detail === 'Email already registered' || detail === 'E-mail já cadastrado'
+          ? 'Este e-mail já está cadastrado. Faça login ou use outro e-mail.'
           : 'Não foi possível concluir a matrícula. Verifique os dados e tente novamente.',
       );
     } finally {

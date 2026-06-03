@@ -10,10 +10,10 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   imports: [FormsModule, StarkeLogoComponent],
   template: `
     <section class="mx-auto mt-10 max-w-md">
-      <app-starke-logo size="lg" title="Starke Academy Admin" containerClass="mb-8" />
+      <app-starke-logo size="lg" title="Starke Academy — Admin" containerClass="mb-8" />
 
       <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-8 shadow-gold">
-      <h1 class="text-2xl font-semibold text-gold-300">Super Admin Access</h1>
+      <h1 class="text-2xl font-semibold text-gold-300">Acesso de administrador</h1>
       <p class="mt-2 text-sm text-slate-300">Gerencie cursos e envie detalhes para alunos.</p>
 
       <form class="mt-6 space-y-4" (ngSubmit)="submit()">
@@ -22,7 +22,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           name="email"
           type="email"
           required
-          placeholder="Email"
+          placeholder="E-mail"
           class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
         />
         <input
