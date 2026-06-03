@@ -3,7 +3,7 @@
   "experimentalServices": {
     "backend": {
       "entrypoint": "backend/app/main.py",
-      "routePrefix": "/api",
+      "routePrefix": "/",
       "framework": "fastapi",
       "includeFiles": [
         "public/**",

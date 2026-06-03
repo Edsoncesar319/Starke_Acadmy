@@ -173,7 +173,7 @@ def health():
 @app.get("/build-id")
 def build_id():
     # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
-    return {"build_id": "vercel-spa-api-split-20260603"}
+    return {"build_id": "vercel-spa-static-20260603"}
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -1363,6 +1363,12 @@ async def admin_upload_lesson_pdf(
 
 # Composite app: API under /api; SPA/static em public/ (CDN + StaticFiles).
 def _resolve_public_dir() -> Path | None:
+    env_path = os.getenv("SPA_PUBLIC_DIR", "").strip()
+    if env_path:
+        candidate = Path(env_path)
+        if (candidate / "index.html").is_file():
+            return candidate
+
     app_dir = Path(__file__).resolve().parent
     backend_root = app_dir.parent
     repo_root = backend_root.parent
@@ -1373,20 +1379,12 @@ def _resolve_public_dir() -> Path | None:
         repo_root / "public",
         backend_root / "public",
         backend_root / "app" / "public",
-        # Vercel pode realocar o entrypoint; tentamos também o caminho
-        # "backend/app/public" relativo ao diretório que contenha `main.py`.
         backend_root / "backend" / "app" / "public",
         backend_root / "backend" / "public",
+        task_root / "public",
         task_root / "backend" / "app" / "public",
+        task_root / "backend" / "public",
     ]
-    if task_root.is_dir():
-        candidates.extend(
-            [
-                task_root / "public",
-                task_root / "backend" / "app" / "public",
-                task_root / "backend" / "public",
-            ]
-        )
 
     for public in candidates:
         if (public / "index.html").is_file():
@@ -1394,6 +1392,15 @@ def _resolve_public_dir() -> Path | None:
         nested = public / "browser"
         if (nested / "index.html").is_file():
             return nested
+
+    for parent in Path(__file__).resolve().parents:
+        for relative in ("public", "app/public", "backend/app/public"):
+            public = parent / relative
+            if (public / "index.html").is_file():
+                return public
+            nested = public / "browser"
+            if (nested / "index.html").is_file():
+                return nested
     return None
 
 
@@ -1455,25 +1462,33 @@ async def portal_favicon():
     raise HTTPException(status_code=404, detail="favicon not found")
 
 
-if PUBLIC_DIR:
-    application.mount(
-        "/",
-        StaticFiles(directory=str(PUBLIC_DIR), html=True),
-        name="spa",
-    )
-else:
+def _safe_public_file(public: Path, relative_path: str) -> Path | None:
+    clean = relative_path.replace("\\", "/").lstrip("/")
+    if not clean or ".." in clean.split("/"):
+        return None
+    candidate = (public / clean).resolve()
+    public_root = public.resolve()
+    if os.path.commonpath([str(candidate), str(public_root)]) != str(public_root):
+        return None
+    return candidate if candidate.is_file() else None
 
-    @application.get("/")
-    async def serve_portal_placeholder():
-        return {
-            "status": "ok",
-            "message": "Execute: cd frontend && npm run build (gera /public na raiz)",
-        }
 
-    @application.get("/{full_path:path}")
-    async def spa_route_missing(full_path: str):
-        if full_path.startswith("api") or full_path == "favicon.ico":
-            raise HTTPException(status_code=404, detail="Not found")
+@application.get("/", include_in_schema=False)
+async def serve_portal_root():
+    return await _serve_portal_path("")
+
+
+@application.get("/{full_path:path}", include_in_schema=False)
+async def serve_portal_path(full_path: str):
+    return await _serve_portal_path(full_path)
+
+
+async def _serve_portal_path(full_path: str):
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    public = _resolve_public_dir()
+    if not public:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -1482,7 +1497,17 @@ else:
             ),
         )
 
+    if full_path and full_path != "favicon.ico":
+        asset = _safe_public_file(public, full_path)
+        if asset:
+            return FileResponse(asset)
 
-# Vercel: CDN serves public/ at /; API-only app at routePrefix /api.
-# Local: composite app serves SPA + API on :8000.
-app = elite_api if on_vercel() else application
+    index = public / "index.html"
+    if index.is_file():
+        return FileResponse(index, media_type="text/html")
+
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+# Portal + API no mesmo app (Vercel routePrefix / e dev local na :8000).
+app = application
