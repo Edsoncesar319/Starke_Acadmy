@@ -173,7 +173,7 @@ def health():
 @app.get("/build-id")
 def build_id():
     # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
-    return {"build_id": "vercel-fix-521534b"}
+    return {"build_id": "vercel-instructors-20260603"}
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)

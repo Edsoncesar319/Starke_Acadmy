@@ -10,10 +10,10 @@
         "backend/app/public/**",
         "backend/app/branding/**"
       ]
-    }
-  },
-  "functions": {
-    "api/blob-client-upload.js": {
+    },
+    "blobUpload": {
+      "entrypoint": "api/blob-client-upload.js",
+      "routePrefix": "/api/blob-client-upload",
       "memory": 1024,
       "maxDuration": 60
     }
