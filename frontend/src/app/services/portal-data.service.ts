@@ -45,6 +45,8 @@ export interface Lesson {
 export interface StudentMessage {
   id: number;
   userId: number;
+  sentByAdminId: number;
+  isFromStudent: boolean;
   courseId: number | null;
   subject: string;
   details: string;
@@ -150,7 +152,7 @@ export class PortalDataService {
     const userId = this.student().id;
     if (!userId) return 0;
     const lastSeenId = Number(localStorage.getItem(this.lastSeenMessageKey(userId)) ?? 0);
-    return this.messages().filter((message) => message.id > lastSeenId).length;
+    return this.messages().filter((message) => !message.isFromStudent && message.id > lastSeenId).length;
   });
 
   async refreshPortalData(): Promise<void> {
@@ -191,16 +193,7 @@ export class PortalDataService {
           lastAccessed: item.last_accessed,
         })),
       );
-      this.messages.set(
-        messages.map((item) => ({
-          id: item.id,
-          userId: item.user_id,
-          courseId: item.course_id,
-          subject: item.subject,
-          details: item.details,
-          createdAt: item.created_at,
-        })),
-      );
+      this.messages.set(messages.map((item) => this.mapStudentMessage(item)));
     } catch {
       this.error.set('Não foi possível carregar os dados. Verifique se o backend está em execução na porta 8000.');
     } finally {
@@ -503,19 +496,62 @@ export class PortalDataService {
     }
     try {
       const messages = await firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/messages`));
-      this.messages.set(
-        messages.map((item) => ({
-          id: item.id,
-          userId: item.user_id,
-          courseId: item.course_id,
-          subject: item.subject,
-          details: item.details,
-          createdAt: item.created_at,
-        })),
-      );
+      this.messages.set(messages.map((item) => this.mapStudentMessage(item)));
     } catch {
       // Keep existing messages if refresh fails.
     }
+  }
+
+  async sendStudentMessage(payload: {
+    details: string;
+    subject?: string;
+    courseId?: number | null;
+  }): Promise<StudentMessage | null> {
+    this.error.set(null);
+    const details = payload.details.trim();
+    if (!details) {
+      this.error.set('Digite uma mensagem antes de enviar.');
+      return null;
+    }
+    try {
+      const created = await firstValueFrom(
+        this.http.post<any>(`${this.apiUrl}/messages`, {
+          subject: payload.subject?.trim() || null,
+          details,
+          course_id: payload.courseId ?? null,
+        }),
+      );
+      const mapped = this.mapStudentMessage(created);
+      this.messages.update((list) => [...list, mapped]);
+      return mapped;
+    } catch (err) {
+      const detail = (err as { error?: { detail?: string } })?.error?.detail;
+      this.error.set(typeof detail === 'string' ? detail : 'Não foi possível enviar a mensagem.');
+      return null;
+    }
+  }
+
+  private mapStudentMessage(item: {
+    id: number;
+    user_id: number;
+    sent_by_admin_id: number;
+    is_from_student?: boolean;
+    course_id: number | null;
+    subject: string;
+    details: string;
+    created_at: string;
+  }): StudentMessage {
+    const isFromStudent = item.is_from_student ?? item.sent_by_admin_id === item.user_id;
+    return {
+      id: item.id,
+      userId: item.user_id,
+      sentByAdminId: item.sent_by_admin_id,
+      isFromStudent,
+      courseId: item.course_id,
+      subject: item.subject,
+      details: item.details,
+      createdAt: item.created_at,
+    };
   }
 
   markMessagesAsSeen(): void {

@@ -19,7 +19,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         <h1 class="text-2xl font-semibold text-gold-300">Painel do administrador</h1>
         <p class="mt-1 text-sm text-slate-300">Edição dos cursos oferecidos e envio de detalhes para alunos.</p>
         <p class="mt-2 text-xs text-slate-500">
-          {{ admin.students().length }} aluno(s) matriculado(s) · atualização automática a cada 8s
+          {{ admin.students().length }} aluno(s) · {{ admin.instructors().length }} instrutor(es) · atualização a cada 8s
         </p>
         <button (click)="logout()" class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10">
           Sair
@@ -95,6 +95,76 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                         class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
                       >
                         {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </article>
+
+      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-medium text-gold-300">Instrutores</h2>
+            <p class="text-xs text-slate-500">Usuários com permissão para gerenciar vídeo-aulas na plataforma.</p>
+          </div>
+          <span class="rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-300">
+            Total: {{ admin.instructors().length }}
+          </span>
+        </div>
+
+        @if (admin.instructors().length === 0) {
+          <p class="rounded-lg border border-gold-500/15 bg-obsidian-800/60 px-4 py-6 text-center text-sm text-slate-400">
+            Nenhum instrutor cadastrado. Marque um aluno como instrutor em «Editar perfil do aluno».
+          </p>
+        } @else {
+          <div class="max-h-64 overflow-auto rounded-lg border border-gold-500/15">
+            <table class="w-full min-w-[640px] text-left text-sm">
+              <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
+                <tr>
+                  <th class="px-4 py-3">ID</th>
+                  <th class="px-4 py-3">Instrutor</th>
+                  <th class="px-4 py-3">E-mail</th>
+                  <th class="px-4 py-3">Nível</th>
+                  <th class="px-4 py-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (instructor of admin.instructors(); track instructor.id) {
+                  <tr
+                    [class]="
+                      instructor.id === selectedUserId
+                        ? 'border-t border-gold-500/10 bg-gold-500/10 transition hover:bg-gold-500/5'
+                        : 'border-t border-gold-500/10 transition hover:bg-gold-500/5'
+                    "
+                  >
+                    <td class="px-4 py-3 text-slate-400">#{{ instructor.id }}</td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-3">
+                        <div
+                          class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/30 bg-gold-500/10 text-xs font-semibold text-gold-300"
+                        >
+                          @if (instructor.avatar_url) {
+                            <img [src]="instructor.avatar_url" alt="" class="h-full w-full object-cover" />
+                          } @else {
+                            {{ studentInitials(instructor.name) }}
+                          }
+                        </div>
+                        <span class="font-medium text-slate-100">{{ instructor.name }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-slate-300">{{ instructor.email }}</td>
+                    <td class="px-4 py-3 text-gold-300/90">{{ instructor.student_level }}</td>
+                    <td class="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        (click)="selectInstructor(instructor.id)"
+                        class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        {{ instructor.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
                       </button>
                     </td>
                   </tr>
@@ -445,8 +515,10 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         </article>
 
         <article class="mb-4 rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
-          <h2 class="mb-1 text-lg font-medium text-gold-300">Editar Perfil do Aluno</h2>
-          <p class="mb-4 text-xs text-slate-500">Novos cadastros aparecem automaticamente na lista abaixo.</p>
+          <h2 class="mb-1 text-lg font-medium text-gold-300">Editar perfil do usuário</h2>
+          <p class="mb-4 text-xs text-slate-500">
+            Selecione um aluno ou instrutor nas tabelas acima. Instrutores saem da lista de alunos.
+          </p>
           <form class="space-y-3" (ngSubmit)="saveStudentProfile()">
             <input
               [(ngModel)]="studentProfile.name"
@@ -545,22 +617,38 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 
           <div class="chat-body">
             @if (chatMessagesForStudent().length === 0) {
-              <p class="text-center text-sm text-slate-500">Nenhuma mensagem enviada para este aluno.</p>
+              <p class="text-center text-sm text-slate-500">Nenhuma mensagem com este aluno ainda.</p>
             } @else {
               @for (message of chatMessagesForStudent(); track message.id) {
-                <div class="chat-row chat-row-out">
-                  <div>
-                    <article class="chat-bubble chat-bubble-out">
-                      <p class="font-semibold">{{ message.subject }}</p>
-                      @if (courseTitle(message.course_id)) {
-                        <p class="mt-1 text-xs text-gold-200/80">{{ courseTitle(message.course_id) }}</p>
-                      }
-                      <p class="mt-2 whitespace-pre-wrap leading-relaxed">{{ message.details }}</p>
-                    </article>
-                    <p class="chat-meta text-right">{{ formatTime(message.created_at) }}</p>
+                @if (isMessageFromStudent(message)) {
+                  <div class="chat-row chat-row-in">
+                    <div class="chat-avatar">AL</div>
+                    <div>
+                      <article class="chat-bubble chat-bubble-in">
+                        <p class="font-semibold text-gold-300">{{ message.subject }}</p>
+                        @if (courseTitle(message.course_id)) {
+                          <p class="mt-1 text-xs text-gold-400/80">{{ courseTitle(message.course_id) }}</p>
+                        }
+                        <p class="mt-2 whitespace-pre-wrap leading-relaxed">{{ message.details }}</p>
+                      </article>
+                      <p class="chat-meta">{{ formatTime(message.created_at) }}</p>
+                    </div>
                   </div>
-                  <div class="chat-avatar">AD</div>
-                </div>
+                } @else {
+                  <div class="chat-row chat-row-out">
+                    <div>
+                      <article class="chat-bubble chat-bubble-out">
+                        <p class="font-semibold">{{ message.subject }}</p>
+                        @if (courseTitle(message.course_id)) {
+                          <p class="mt-1 text-xs text-gold-200/80">{{ courseTitle(message.course_id) }}</p>
+                        }
+                        <p class="mt-2 whitespace-pre-wrap leading-relaxed">{{ message.details }}</p>
+                      </article>
+                      <p class="chat-meta text-right">{{ formatTime(message.created_at) }}</p>
+                    </div>
+                    <div class="chat-avatar">AD</div>
+                  </div>
+                }
               }
             }
           </div>
@@ -656,20 +744,29 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
 
   private syncSelectedStudent(preferNewest = false): void {
     const students = this.admin.students();
-    if (students.length === 0) {
+    const instructors = this.admin.instructors();
+    if (students.length === 0 && instructors.length === 0) {
       this.selectedUserId = null;
       return;
     }
 
-    const stillExists = students.some((student) => student.id === this.selectedUserId);
+    const stillExists =
+      students.some((student) => student.id === this.selectedUserId) ||
+      instructors.some((instructor) => instructor.id === this.selectedUserId);
+
     if (!stillExists || preferNewest) {
-      this.selectedUserId = students[0].id;
+      this.selectedUserId = students[0]?.id ?? instructors[0]?.id ?? null;
     }
     this.onStudentChange();
   }
 
   selectStudent(studentId: number): void {
     this.selectedUserId = studentId;
+    this.onStudentChange();
+  }
+
+  selectInstructor(instructorId: number): void {
+    this.selectedUserId = instructorId;
     this.onStudentChange();
   }
 
@@ -683,15 +780,23 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   onStudentChange(): void {
-    const student = this.admin.students().find((item) => item.id === this.selectedUserId);
-    if (!student) return;
+    const user = this.findEditableUser(this.selectedUserId);
+    if (!user) return;
     this.studentProfile = {
-      name: student.name,
-      email: student.email,
-      studentLevel: student.student_level,
-      avatarUrl: student.avatar_url ?? '',
-      isInstructor: student.is_instructor ?? false,
+      name: user.name,
+      email: user.email,
+      studentLevel: user.student_level,
+      avatarUrl: user.avatar_url ?? '',
+      isInstructor: user.is_instructor ?? false,
     };
+  }
+
+  private findEditableUser(userId: number | null) {
+    if (!userId) return undefined;
+    return (
+      this.admin.students().find((item) => item.id === userId) ??
+      this.admin.instructors().find((item) => item.id === userId)
+    );
   }
 
   async saveStudentProfile(): Promise<void> {
@@ -972,8 +1077,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   selectedStudentName(): string {
-    const student = this.admin.students().find((item) => item.id === this.selectedUserId);
-    return student?.name ?? '';
+    return this.findEditableUser(this.selectedUserId)?.name ?? '';
   }
 
   chatMessagesForStudent() {
@@ -982,6 +1086,10 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
       .sentMessages()
       .filter((message) => message.user_id === this.selectedUserId)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
+
+  isMessageFromStudent(message: { user_id: number; is_from_student?: boolean; sent_by_admin_id: number }): boolean {
+    return message.is_from_student ?? message.sent_by_admin_id === message.user_id;
   }
 
   courseTitle(courseId: number | null): string {

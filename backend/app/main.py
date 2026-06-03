@@ -58,6 +58,7 @@ from .schemas import (
     PurchaseOut,
     StudentMessageCreate,
     StudentMessageOut,
+    StudentMessageReplyCreate,
     TicketCreate,
     TicketOut,
     Token,
@@ -978,14 +979,59 @@ def create_ticket(
     return ticket
 
 
+def _message_to_out(message: StudentMessage) -> StudentMessageOut:
+    return StudentMessageOut.from_orm_message(message)
+
+
 @app.get("/messages", response_model=list[StudentMessageOut])
 def list_student_messages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(StudentMessage)
         .filter(StudentMessage.user_id == current_user.id)
-        .order_by(StudentMessage.created_at.desc())
+        .order_by(StudentMessage.created_at.asc())
         .all()
     )
+    return [_message_to_out(row) for row in rows]
+
+
+@app.post("/messages", response_model=StudentMessageOut, status_code=status.HTTP_201_CREATED)
+def student_send_message(
+    payload: StudentMessageReplyCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin or current_user.is_instructor:
+        raise HTTPException(status_code=403, detail="Use o painel administrativo para enviar mensagens.")
+
+    details = payload.details.strip()
+    if not details:
+        raise HTTPException(status_code=400, detail="Digite uma mensagem antes de enviar.")
+
+    subject = (payload.subject or "Mensagem do aluno").strip()[:180] or "Mensagem do aluno"
+
+    if payload.course_id is not None:
+        course = db.query(Course).filter(Course.id == payload.course_id).first()
+        if not course:
+            raise HTTPException(status_code=404, detail="Curso não encontrado.")
+        enrolled = (
+            db.query(Enrollment)
+            .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == payload.course_id)
+            .first()
+        )
+        if not enrolled:
+            raise HTTPException(status_code=403, detail="Você precisa estar matriculado neste curso.")
+
+    message = StudentMessage(
+        user_id=current_user.id,
+        sent_by_admin_id=current_user.id,
+        course_id=payload.course_id,
+        subject=subject,
+        details=details,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return _message_to_out(message)
 
 
 @app.get("/admin/users", response_model=list[UserOut])
@@ -998,6 +1044,16 @@ def admin_list_students(_: User = Depends(get_current_admin), db: Session = Depe
     return (
         db.query(User)
         .filter(User.is_admin.is_(False), User.is_instructor.is_(False))
+        .order_by(User.id.desc())
+        .all()
+    )
+
+
+@app.get("/admin/instructors", response_model=list[UserOut])
+def admin_list_instructors(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return (
+        db.query(User)
+        .filter(User.is_admin.is_(False), User.is_instructor.is_(True))
         .order_by(User.id.desc())
         .all()
     )
@@ -1136,12 +1192,13 @@ def admin_send_message(
     db.add(message)
     db.commit()
     db.refresh(message)
-    return message
+    return _message_to_out(message)
 
 
 @app.get("/admin/messages", response_model=list[StudentMessageOut])
 def admin_list_messages(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
-    return db.query(StudentMessage).order_by(StudentMessage.created_at.desc()).all()
+    rows = db.query(StudentMessage).order_by(StudentMessage.created_at.desc()).all()
+    return [_message_to_out(row) for row in rows]
 
 
 @app.post("/admin/courses/upload-image")

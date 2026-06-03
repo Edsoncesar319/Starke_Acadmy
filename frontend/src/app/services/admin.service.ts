@@ -39,6 +39,8 @@ export interface AdminUser {
 export interface AdminSentMessage {
   id: number;
   user_id: number;
+  sent_by_admin_id: number;
+  is_from_student: boolean;
   course_id: number | null;
   subject: string;
   details: string;
@@ -82,6 +84,7 @@ export class AdminService {
   private readonly auth = inject(AuthService);
   readonly courses = signal<AdminCourse[]>([]);
   readonly students = signal<AdminUser[]>([]);
+  readonly instructors = signal<AdminUser[]>([]);
   readonly sentMessages = signal<AdminSentMessage[]>([]);
   readonly lessons = signal<AdminLesson[]>([]);
   readonly status = signal<string | null>(null);
@@ -99,9 +102,10 @@ export class AdminService {
 
   async refreshDashboard(silent = true): Promise<number> {
     try {
-      const [courses, students, messages] = await Promise.all([
+      const [courses, students, instructors, messages] = await Promise.all([
         firstValueFrom(this.http.get<AdminCourse[]>(`${this.apiUrl}/courses`)),
         firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/students`)),
+        firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/instructors`)),
         firstValueFrom(this.http.get<AdminSentMessage[]>(`${this.apiUrl}/admin/messages`)),
       ]);
       const previousIds = new Set(this.students().map((student) => student.id));
@@ -109,6 +113,7 @@ export class AdminService {
 
       this.courses.set(courses);
       this.students.set(students);
+      this.instructors.set(instructors);
       this.sentMessages.set(messages);
 
       if (newStudents.length > 0 && !silent) {
@@ -160,9 +165,10 @@ export class AdminService {
       `${this.apiUrl}/admin/students/${studentId}/upload-avatar`,
       'Foto do aluno atualizada.',
     );
-    this.students.update((list) =>
-      list.map((student) => (student.id === studentId ? { ...student, avatar_url: imageUrl } : student)),
-    );
+    const patchAvatar = (list: AdminUser[]) =>
+      list.map((user) => (user.id === studentId ? { ...user, avatar_url: imageUrl } : user));
+    this.students.update(patchAvatar);
+    this.instructors.update(patchAvatar);
     return imageUrl;
   }
 

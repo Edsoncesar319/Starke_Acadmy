@@ -232,6 +232,12 @@ class StudentMessageCreate(BaseModel):
     details: str
 
 
+class StudentMessageReplyCreate(BaseModel):
+    course_id: int | None = None
+    subject: str | None = None
+    details: str
+
+
 class StudentMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -242,3 +248,17 @@ class StudentMessageOut(BaseModel):
     subject: str
     details: str
     created_at: datetime
+    is_from_student: bool = False
+
+    @classmethod
+    def from_orm_message(cls, message) -> "StudentMessageOut":
+        return cls(
+            id=message.id,
+            user_id=message.user_id,
+            sent_by_admin_id=message.sent_by_admin_id,
+            course_id=message.course_id,
+            subject=message.subject,
+            details=message.details,
+            created_at=message.created_at,
+            is_from_student=message.sent_by_admin_id == message.user_id,
+        )
