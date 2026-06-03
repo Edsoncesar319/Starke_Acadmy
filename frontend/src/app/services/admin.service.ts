@@ -339,6 +339,21 @@ export class AdminService {
     return fallback;
   }
 
+  private blobResultToMediaUrl(result: { url: string; pathname?: string | null }): string {
+    const pathname = result.pathname?.replace(/^\//, '');
+    if (pathname) {
+      return `${this.apiUrl}/media/${pathname}`;
+    }
+    if (result.url.startsWith('/api/media/')) {
+      return result.url;
+    }
+    const fromBlob = result.url.match(/blob\.vercel-storage\.com\/(.+)$/);
+    if (fromBlob?.[1]) {
+      return `${this.apiUrl}/media/${fromBlob[1]}`;
+    }
+    return result.url;
+  }
+
   async uploadLessonVideo(file: File): Promise<string> {
     this.error.set(null);
     const validationMessage = videoValidationError(file);
@@ -407,14 +422,16 @@ export class AdminService {
 
     try {
       const result = await upload(file.name, file, {
-        access: 'public',
+        access: 'private',
         handleUploadUrl: environment.blobClientUploadUrl,
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        multipart: file.size > 8 * 1024 * 1024,
+        contentType: file.type || undefined,
       });
       this.status.set('Vídeo da aula enviado com sucesso.');
-      return result.url;
+      return this.blobResultToMediaUrl(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Falha no upload do vídeo via Blob.';
       this.error.set(message);

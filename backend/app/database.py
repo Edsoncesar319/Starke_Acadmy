@@ -12,12 +12,22 @@ _default_sqlite = (
 
 
 def resolve_database_url() -> str:
-    url = (
-        os.getenv("POSTGRES_URL")
-        or os.getenv("POSTGRES_URL_NON_POOLING")
-        or os.getenv("DATABASE_URL")
-        or _default_sqlite
+    candidates = (
+        "POSTGRES_URL",
+        "POSTGRES_URL_NON_POOLING",
+        "DATABASE_URL",
+        "starke_academy_POSTGRES_URL",
+        "starke_academy_POSTGRES_URL_NON_POOLING",
+        "starke_academy_DATABASE_URL",
     )
+    url = ""
+    for key in candidates:
+        value = os.getenv(key, "").strip()
+        if value:
+            url = value
+            break
+    if not url:
+        url = _default_sqlite
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     if url.startswith("postgresql://") and "+psycopg" not in url.split("://", 1)[0]:

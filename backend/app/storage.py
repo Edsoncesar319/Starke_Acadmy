@@ -23,7 +23,7 @@ VERCEL_MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 
 
 def blob_storage_enabled() -> bool:
-    return bool(os.getenv("BLOB_READ_WRITE_TOKEN"))
+    return bool(os.getenv("BLOB_READ_WRITE_TOKEN", "").strip())
 
 
 def on_vercel() -> bool:
@@ -32,6 +32,54 @@ def on_vercel() -> bool:
 
 def max_video_bytes() -> int:
     return VERCEL_MAX_UPLOAD_BYTES if on_vercel() else 100 * 1024 * 1024
+
+
+def _blob_access_preference() -> str:
+    value = os.getenv("BLOB_ACCESS", "auto").strip().lower()
+    if value in {"public", "private"}:
+        return value
+    return "auto"
+
+
+def _public_media_url(pathname: str) -> str:
+    clean = pathname.lstrip("/")
+    return f"{API_PUBLIC_BASE_URL}/media/{clean}"
+
+
+def _upload_to_blob(*, blob_path: str, content: bytes, content_type: str) -> str:
+    from vercel.blob import BlobClient
+
+    preference = _blob_access_preference()
+    modes: list[str]
+    if preference == "auto":
+        modes = ["public", "private"]
+    else:
+        modes = [preference]
+
+    last_error: Exception | None = None
+    with BlobClient() as client:
+        for access in modes:
+            try:
+                uploaded = client.put(
+                    blob_path,
+                    content,
+                    access=access,  # type: ignore[arg-type]
+                    content_type=content_type,
+                    add_random_suffix=True,
+                )
+                if access == "private" or ".private.blob." in uploaded.url:
+                    return _public_media_url(uploaded.pathname)
+                return uploaded.url
+            except Exception as exc:
+                message = str(exc).lower()
+                if access == "public" and "private store" in message:
+                    last_error = exc
+                    continue
+                raise
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("Falha ao enviar arquivo para o Vercel Blob.")
 
 
 async def store_public_file(
@@ -44,16 +92,15 @@ async def store_public_file(
 ) -> str:
     """Persist file to Vercel Blob (production) or local uploads/ (development)."""
     if blob_storage_enabled():
-        from vercel.blob import AsyncBlobClient
-
-        async with AsyncBlobClient() as client:
-            uploaded = await client.put(
-                blob_path,
-                content,
-                access="public",
-                content_type=content_type,
-            )
-            return uploaded.url
+        try:
+            return _upload_to_blob(blob_path=blob_path, content=content, content_type=content_type)
+        except Exception as exc:
+            if on_vercel():
+                raise RuntimeError(
+                    "Falha ao enviar arquivo para o Vercel Blob. "
+                    "Verifique se o store Blob está conectado ao projeto."
+                ) from exc
+            raise
 
     local_dir.mkdir(parents=True, exist_ok=True)
     local_name = f"{uuid4().hex}{Path(blob_path).suffix}"
@@ -95,3 +142,17 @@ async def upload_lesson_pdf(content: bytes, extension: str, content_type: str) -
         local_dir=UPLOAD_DIR,
         public_url_path="/uploads",
     )
+
+
+def fetch_blob_bytes(pathname: str) -> tuple[bytes, str]:
+    from vercel.blob import BlobClient
+
+    clean = pathname.lstrip("/")
+    with BlobClient() as client:
+        for access in ("private", "public"):
+            try:
+                result = client.get(clean, access=access)  # type: ignore[arg-type]
+                return result.content, result.content_type or "application/octet-stream"
+            except Exception:
+                continue
+    raise FileNotFoundError(clean)

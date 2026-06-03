@@ -1,11 +1,12 @@
 import os
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -16,9 +17,11 @@ from .auth import (
     get_current_admin,
     get_current_content_manager,
     get_current_user,
+    get_user_from_authorization_header,
     verify_password,
 )
-from .database import Base, SessionLocal, engine, ensure_schema_updates, get_db
+from .blob_client_upload import handle_blob_client_upload
+from .database import Base, SessionLocal, engine, ensure_schema_updates, get_db, DATABASE_URL
 from .storage import (
     UPLOAD_DIR,
     VIDEO_UPLOAD_DIR,
@@ -26,6 +29,7 @@ from .storage import (
     max_video_bytes,
     on_vercel,
     upload_avatar_or_course_image,
+    fetch_blob_bytes,
     upload_lesson_pdf,
     upload_lesson_video,
 )
@@ -103,6 +107,12 @@ except ImportError:
 app = FastAPI(title="Starke Academy Elite API", version="1.0.0")
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
+IMAGE_EXTENSION_TO_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov"}
 ALLOWED_VIDEO_MIME_TYPES = {
@@ -167,13 +177,63 @@ def on_elite_api_startup() -> None:
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "blob_storage": blob_storage_enabled(),
+        "database": "postgres" if not DATABASE_URL.startswith("sqlite") else "sqlite",
+    }
+
+
+@app.get("/media/{asset_path:path}", include_in_schema=False)
+def serve_blob_media(asset_path: str, request: Request):
+    if not blob_storage_enabled():
+        raise HTTPException(status_code=404, detail="Media storage unavailable")
+    if ".." in asset_path.split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    try:
+        content, content_type = fetch_blob_bytes(asset_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Media not found") from None
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Failed to load media") from exc
+
+    file_size = len(content)
+    range_header = request.headers.get("range")
+    if range_header:
+        match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else file_size - 1
+            end = min(end, file_size - 1)
+            if start <= end:
+                chunk = content[start : end + 1]
+                return Response(
+                    content=chunk,
+                    status_code=206,
+                    media_type=content_type,
+                    headers={
+                        "Content-Range": f"bytes {start}-{end}/{file_size}",
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": str(len(chunk)),
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                    },
+                )
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    )
 
 
 @app.get("/build-id")
 def build_id():
     # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
-    return {"build_id": "vercel-portal-branding-20260603"}
+    return {"build_id": "vercel-video-upload-python-20260603"}
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -241,7 +301,11 @@ async def _save_uploaded_image(file: UploadFile, *, blob_folder: str) -> str:
     extension = Path(file.filename or "").suffix.lower()
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Invalid image format")
-    if file.content_type not in ALLOWED_IMAGE_MIME_TYPES:
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_IMAGE_MIME_TYPES:
+        content_type = IMAGE_EXTENSION_TO_MIME.get(extension, content_type)
+    if content_type not in ALLOWED_IMAGE_MIME_TYPES:
         raise HTTPException(status_code=400, detail="Invalid image content type")
 
     content = await file.read()
@@ -249,12 +313,20 @@ async def _save_uploaded_image(file: UploadFile, *, blob_folder: str) -> str:
     if len(content) > max_bytes:
         raise HTTPException(status_code=400, detail=f"Image too large (max {max_bytes // (1024 * 1024)}MB)")
 
-    return await upload_avatar_or_course_image(
-        content,
-        extension,
-        file.content_type or "application/octet-stream",
-        blob_folder=blob_folder,
-    )
+    try:
+        return await upload_avatar_or_course_image(
+            content,
+            extension,
+            content_type,
+            blob_folder=blob_folder,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = "Falha no upload da imagem."
+        if on_vercel() and not blob_storage_enabled():
+            detail = "Upload indisponível: conecte o Vercel Blob ao projeto (BLOB_READ_WRITE_TOKEN)."
+        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 async def _save_uploaded_video(file: UploadFile) -> str:
@@ -279,15 +351,23 @@ async def _save_uploaded_video(file: UploadFile) -> str:
         if on_vercel():
             raise HTTPException(
                 status_code=400,
-                detail="Video too large for server upload on Vercel (max 4MB). Use a smaller file or client-side upload.",
+                detail="Vídeo grande demais para upload direto (máx. 4 MB). O portal usa upload via Blob automaticamente.",
             )
         raise HTTPException(status_code=400, detail="Video too large (max 100MB)")
 
-    return await upload_lesson_video(
-        content,
-        extension,
-        file.content_type or "application/octet-stream",
-    )
+    try:
+        return await upload_lesson_video(
+            content,
+            extension,
+            file.content_type or "application/octet-stream",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = "Falha no upload do vídeo."
+        if on_vercel() and not blob_storage_enabled():
+            detail = "Upload indisponível: conecte o Vercel Blob ao projeto (BLOB_READ_WRITE_TOKEN)."
+        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 async def _save_uploaded_pdf(file: UploadFile) -> str:
@@ -324,7 +404,7 @@ async def upload_my_avatar(
     current_user.avatar_url = image_url
     db.commit()
     db.refresh(current_user)
-    return {"image_url": image_url, "user": current_user}
+    return {"image_url": image_url, "user": UserOut.model_validate(current_user)}
 
 
 @app.get("/courses", response_model=list[CourseOut])
@@ -1099,7 +1179,7 @@ async def admin_upload_student_avatar(
     student.avatar_url = image_url
     db.commit()
     db.refresh(student)
-    return {"image_url": image_url, "user": student}
+    return {"image_url": image_url, "user": UserOut.model_validate(student)}
 
 
 @app.post("/admin/courses", response_model=CourseOut, status_code=status.HTTP_201_CREATED)
@@ -1339,8 +1419,26 @@ def admin_delete_lesson(
 
 @app.get("/admin/blob/upload-authorize")
 def authorize_lesson_video_blob_upload(_: User = Depends(get_current_content_manager)):
-    """Usado pelo handler Node de client upload do Vercel Blob."""
+    """Legado: autorização de client upload (agora feita em /blob-client-upload)."""
     return {"ok": True}
+
+
+@app.post("/blob-client-upload")
+async def blob_client_upload_endpoint(request: Request, db: Session = Depends(get_db)):
+    """Upload de vídeos grandes via Vercel Blob (navegador → Blob)."""
+    raw_body = await request.body()
+    try:
+        body = json.loads(raw_body.decode() or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Corpo JSON inválido") from exc
+
+    if body.get("type") == "blob.generate-client-token":
+        authorization = request.headers.get("authorization")
+        user = get_user_from_authorization_header(authorization, db)
+        if not (user.is_admin or user.is_instructor):
+            raise HTTPException(status_code=403, detail="Não autorizado para enviar vídeo")
+
+    return await handle_blob_client_upload(request, body, raw_body)
 
 
 @app.post("/admin/lessons/upload-video")

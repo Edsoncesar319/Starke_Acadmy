@@ -453,8 +453,10 @@ export class PortalDataService {
       }));
       this.status.set('Foto de perfil atualizada.');
       return response.image_url;
-    } catch {
-      this.error.set('Falha no upload da foto. Verifique formato e tamanho.');
+    } catch (err: unknown) {
+      const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+      const message = typeof detail === 'string' ? detail : null;
+      this.error.set(message || 'Falha no upload da foto. Verifique formato e tamanho.');
       throw new Error('Falha no upload.');
     }
   }

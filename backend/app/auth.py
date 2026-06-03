@@ -55,6 +55,23 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+def get_user_from_authorization_header(authorization: str | None, db: Session) -> User:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não autenticado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não autenticado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return get_current_user(token=token, db=db)
+
+
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin:
         raise HTTPException(

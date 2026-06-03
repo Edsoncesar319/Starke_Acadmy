@@ -8,12 +8,6 @@
       "includeFiles": [
         "app/branding/**"
       ]
-    },
-    "blobUpload": {
-      "entrypoint": "api/blob-client-upload.js",
-      "routePrefix": "/api/blob-client-upload",
-      "memory": 1024,
-      "maxDuration": 60
     }
   }
 }
