@@ -173,7 +173,7 @@ def health():
 @app.get("/build-id")
 def build_id():
     # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
-    return {"build_id": "vercel-instructors-20260603"}
+    return {"build_id": "vercel-spa-api-split-20260603"}
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -1483,5 +1483,6 @@ else:
         )
 
 
-# Portal + API no mesmo app (Vercel routePrefix / e dev local na :8000).
-app = application
+# Vercel: CDN serves public/ at /; API-only app at routePrefix /api.
+# Local: composite app serves SPA + API on :8000.
+app = elite_api if on_vercel() else application
