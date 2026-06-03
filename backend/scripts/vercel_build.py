@@ -15,6 +15,7 @@ FRONTEND = ROOT / "frontend"
 # Vercel FastAPI serves static files from public/ at the repo root (CDN).
 PUBLIC = ROOT / "public"
 APP_PUBLIC = ROOT / "backend" / "app" / "public"
+APP_PORTAL = ROOT / "backend" / "app" / "branding" / "portal"
 
 
 def _node_env() -> dict[str, str]:
@@ -164,11 +165,12 @@ def ensure_favicon() -> None:
 
 
 def mirror_to_app_package() -> None:
-    """Copy SPA beside main.py so it ships inside the Python bundle if needed."""
-    if APP_PUBLIC.exists():
-        shutil.rmtree(APP_PUBLIC)
-    shutil.copytree(PUBLIC, APP_PUBLIC)
-    print(f"Mirrored SPA to {APP_PUBLIC}", flush=True)
+    """Copy SPA beside main.py and under branding/ (bundled on Vercel Python)."""
+    for target in (APP_PUBLIC, APP_PORTAL):
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(PUBLIC, target)
+        print(f"Mirrored SPA to {target}", flush=True)
 
 
 def main() -> None:

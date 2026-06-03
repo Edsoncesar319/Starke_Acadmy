@@ -6,9 +6,7 @@
       "routePrefix": "/",
       "framework": "fastapi",
       "includeFiles": [
-        "public/**",
-        "backend/app/public/**",
-        "backend/app/branding/**"
+        "app/branding/**"
       ]
     },
     "blobUpload": {

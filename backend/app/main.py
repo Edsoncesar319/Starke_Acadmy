@@ -173,7 +173,7 @@ def health():
 @app.get("/build-id")
 def build_id():
     # Endpoint usado apenas para confirmar se a Vercel implantou este commit.
-    return {"build_id": "vercel-spa-static-20260603"}
+    return {"build_id": "vercel-portal-branding-20260603"}
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -1375,6 +1375,7 @@ def _resolve_public_dir() -> Path | None:
     task_root = Path("/var/task")
 
     candidates: list[Path] = [
+        app_dir / "branding" / "portal",
         app_dir / "public",
         repo_root / "public",
         backend_root / "public",
