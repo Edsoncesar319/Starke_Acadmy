@@ -3,7 +3,7 @@ export const environment = {
   apiUrl: '/api',
   /** Navegador → Vercel Blob (sem passar pelo backend Python). */
   useBlobClientUpload: true,
-  blobClientUploadUrl: '/api/blob-client-upload',
+  blobClientUploadUrl: '/api/vercel-blob-upload',
   /** Private = padrão dos Blob stores na Vercel; use 'public' só com BLOB_ACCESS=public. */
   blobVideoAccess: 'private' as const,
 };

@@ -4,7 +4,7 @@ import { upload } from '@vercel/blob/client';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
-import { sanitizeBlobUploadName, videoValidationError } from '../utils/video-upload.util';
+import { lessonVideoBlobPath, videoValidationError } from '../utils/video-upload.util';
 import { AuthService } from './auth.service';
 
 const BLOB_VIDEO_TYPES = [
@@ -439,12 +439,12 @@ export class AdminService {
 
     const access: 'public' | 'private' =
       environment.blobVideoAccess === 'public' ? 'public' : 'private';
-    const uploadName = sanitizeBlobUploadName(file.name);
+    const uploadPath = lessonVideoBlobPath(file.name);
     const contentType =
-      file.type && BLOB_VIDEO_TYPES.includes(file.type) ? file.type : guessVideoContentType(uploadName);
+      file.type && BLOB_VIDEO_TYPES.includes(file.type) ? file.type : guessVideoContentType(uploadPath);
 
     try {
-      const result = await upload(uploadName, file, {
+      const result = await upload(uploadPath, file, {
         access,
         clientPayload: JSON.stringify({ access }),
         handleUploadUrl: environment.blobClientUploadUrl,

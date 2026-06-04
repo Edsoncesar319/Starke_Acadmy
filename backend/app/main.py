@@ -1436,9 +1436,9 @@ def authorize_lesson_video_blob_upload(_: User = Depends(get_current_content_man
     return {"ok": True}
 
 
-@app.post("/blob-client-upload")
+@app.post("/blob-client-upload", deprecated=True)
 async def blob_client_upload_endpoint(request: Request, db: Session = Depends(get_db)):
-    """Upload de vídeos grandes via Vercel Blob (navegador → Blob)."""
+    """Legado: use a função serverless /api/vercel-blob-upload (handleUpload oficial)."""
     raw_body = await request.body()
     try:
         body = json.loads(raw_body.decode() or "{}")

@@ -7,6 +7,12 @@ export function isAllowedVideoFile(file: File): boolean {
   return ALLOWED_VIDEO_EXTENSIONS.test(file.name);
 }
 
+/** Pathname completo para upload() — deve coincidir com o token do servidor. */
+export function lessonVideoBlobPath(fileName: string): string {
+  const base = sanitizeBlobUploadName(fileName);
+  return base.startsWith('lesson-videos/') ? base : `lesson-videos/${base}`;
+}
+
 /** Nome seguro para pathname no Blob (extensão obrigatória; sem # ou espaços). */
 export function sanitizeBlobUploadName(fileName: string): string {
   const raw = (fileName || 'lesson-video.mp4').trim();
