@@ -22,6 +22,7 @@ VIDEO_TYPES = [
 ]
 
 MAX_VIDEO_BYTES = 100 * 1024 * 1024
+TOKEN_TTL_MS = 30 * 60 * 1000
 
 
 def _blob_read_write_token() -> str:
@@ -43,7 +44,7 @@ def _generate_client_token(*, read_write_token: str, options: dict[str, Any]) ->
         raise HTTPException(status_code=503, detail="Token do Vercel Blob inválido")
 
     payload_obj = dict(options)
-    payload_obj.setdefault("validUntil", int(time.time() * 1000) + 3600 * 1000)
+    payload_obj.setdefault("validUntil", int(time.time() * 1000) + TOKEN_TTL_MS)
     payload_json = json.dumps(payload_obj, separators=(",", ":"))
     payload_b64 = base64.b64encode(payload_json.encode()).decode()
     secured_key = _sign_payload(payload_b64, read_write_token)

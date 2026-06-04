@@ -7,6 +7,21 @@ export function isAllowedVideoFile(file: File): boolean {
   return ALLOWED_VIDEO_EXTENSIONS.test(file.name);
 }
 
+/** Nome seguro para pathname no Blob (extensão obrigatória; sem # ou espaços). */
+export function sanitizeBlobUploadName(fileName: string): string {
+  const raw = (fileName || 'lesson-video.mp4').trim();
+  const cleaned = raw
+    .replace(/[#?&%]/g, '_')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  if (/\.(mp4|webm|mov)$/i.test(cleaned)) {
+    return cleaned;
+  }
+  const ext = (raw.match(/\.(mp4|webm|mov)$/i) || ['.mp4'])[0].toLowerCase();
+  return `lesson-video${ext}`;
+}
+
 export function videoValidationError(file: File): string | null {
   if (!isAllowedVideoFile(file)) {
     return 'Formato inválido. Use arquivo MP4, WEBM ou MOV.';

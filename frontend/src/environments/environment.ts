@@ -4,5 +4,5 @@ export const environment = {
   /** Ative com BLOB_READ_WRITE_TOKEN local para testar upload direto. */
   useBlobClientUpload: false,
   blobClientUploadUrl: '/api/blob-client-upload',
-  blobVideoAccess: 'public' as const,
+  blobVideoAccess: 'private' as const,
 };

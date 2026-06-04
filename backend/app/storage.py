@@ -42,11 +42,11 @@ def _blob_access_preference() -> str:
 
 
 def lesson_video_blob_access() -> str:
-    """Prefer public blobs for direct CDN playback; honor explicit private stores."""
+    """Default private (stores Vercel atuais); use BLOB_ACCESS=public se o store for público."""
     preference = _blob_access_preference()
-    if preference == "private":
-        return "private"
-    return "public"
+    if preference == "public":
+        return "public"
+    return "private"
 
 
 def resolve_blob_redirect_url(pathname: str) -> str | None:
