@@ -58,6 +58,24 @@ def ensure_toolchain() -> None:
             return
 
 
+def _committed_spa_ready() -> bool:
+    """SPA pré-buildada em /public ou backend/app/public (fallback no repo)."""
+    return (PUBLIC / "index.html").is_file() or (APP_PUBLIC / "index.html").is_file()
+
+
+def ensure_public_from_committed() -> bool:
+    """Garante /public na raiz (CDN Vercel) a partir de backend/app/public se necessário."""
+    if (PUBLIC / "index.html").is_file():
+        return True
+    if (APP_PUBLIC / "index.html").is_file():
+        if PUBLIC.exists():
+            shutil.rmtree(PUBLIC)
+        shutil.copytree(APP_PUBLIC, PUBLIC)
+        print(f"Seeded {PUBLIC} from committed {APP_PUBLIC}", flush=True)
+        return True
+    return False
+
+
 def clean_stale_outputs() -> None:
     for path in (
         PUBLIC,
@@ -78,14 +96,26 @@ def install_frontend() -> None:
 
     if on_vercel or not lock.is_file():
         print("Using npm install for frontend dependencies", flush=True)
-        run([NPM, "install", "--no-audit", "--no-fund"], FRONTEND, env=env)
+        run(
+            [NPM, "install", "--no-audit", "--no-fund", "--legacy-peer-deps"],
+            FRONTEND,
+            env=env,
+        )
         return
 
     try:
-        run([NPM, "ci", "--no-audit", "--no-fund"], FRONTEND, env=env)
+        run(
+            [NPM, "ci", "--no-audit", "--no-fund", "--legacy-peer-deps"],
+            FRONTEND,
+            env=env,
+        )
     except subprocess.CalledProcessError:
         print("npm ci failed, falling back to npm install", flush=True)
-        run([NPM, "install", "--no-audit", "--no-fund"], FRONTEND, env=env)
+        run(
+            [NPM, "install", "--no-audit", "--no-fund", "--legacy-peer-deps"],
+            FRONTEND,
+            env=env,
+        )
 
 
 def find_build_output() -> Path:
@@ -177,8 +207,8 @@ def main() -> None:
     if not (FRONTEND / "package.json").is_file():
         # Fail-open: ainda assim tentamos garantir que /public exista no repo.
         print(f"WARNING: Missing {FRONTEND / 'package.json'}; using committed /public if present.", file=sys.stderr)
-        committed_index = (PUBLIC / "index.html").is_file()
-        if committed_index:
+        committed_index = _committed_spa_ready()
+        if ensure_public_from_committed():
             ensure_favicon()
             mirror_to_app_package()
         return
@@ -188,8 +218,9 @@ def main() -> None:
 
         # Se o build já foi committado em /public, na Vercel a gente pode
         # pular o ng build para evitar falhas de toolchain/npm.
-        committed_index = (PUBLIC / "index.html").is_file()
+        committed_index = _committed_spa_ready()
         if on_vercel and committed_index:
+            ensure_public_from_committed()
             ensure_favicon()
             mirror_to_app_package()
             assets = list(PUBLIC.glob("*.js"))
@@ -210,34 +241,26 @@ def main() -> None:
         # Se o ng build falhar na Vercel, não quebrar o deploy se o SPA já existe
         # commitado (ainda assim, a API precisa subir).
         print(f"Build command failed (exit {exc.returncode})", file=sys.stderr)
-        committed_index = (PUBLIC / "index.html").is_file()
-        if committed_index:
+        committed_index = _committed_spa_ready()
+        if ensure_public_from_committed():
             ensure_favicon()
             mirror_to_app_package()
             print(
-                "Continuing deploy using committed SPA assets from /public after build failure.",
+                "Continuing deploy using committed SPA assets after build failure.",
                 flush=True,
             )
         else:
-            # Falha e também não existe SPA commitada: ainda assim fail-open.
-            committed_index = (PUBLIC / "index.html").is_file()
-            if committed_index:
-                ensure_favicon()
-                mirror_to_app_package()
-            else:
-                print("ERROR: SPA not found and build failed; skipping.", file=sys.stderr)
+            print("ERROR: SPA not found and build failed; skipping.", file=sys.stderr)
             return
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
-        committed_index = (PUBLIC / "index.html").is_file()
-        if committed_index:
+        if ensure_public_from_committed():
             ensure_favicon()
             mirror_to_app_package()
         return
     except Exception as exc:
         print(f"Unexpected vercel_build error: {exc}", file=sys.stderr)
-        committed_index = (PUBLIC / "index.html").is_file()
-        if committed_index:
+        if ensure_public_from_committed():
             ensure_favicon()
             mirror_to_app_package()
         return
