@@ -5,12 +5,12 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import time
 from typing import Any
 
 from fastapi import HTTPException, Request
 
+from .blob_config import resolve_blob_read_write_token, resolve_blob_store_id
 from .storage import lesson_video_blob_access
 
 VIDEO_TYPES = [
@@ -26,10 +26,13 @@ TOKEN_TTL_MS = 30 * 60 * 1000
 
 
 def _blob_read_write_token() -> str:
-    return os.getenv("BLOB_READ_WRITE_TOKEN", "").strip()
+    return resolve_blob_read_write_token()
 
 
 def _parse_store_id(token: str) -> str | None:
+    store = resolve_blob_store_id()
+    if store:
+        return store.removeprefix("store_") if store.startswith("store_") else store
     parts = token.split("_")
     return parts[3] if len(parts) > 3 else None
 

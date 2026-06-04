@@ -1,4 +1,10 @@
 import { handleUpload } from '@vercel/blob/client';
+import {
+  lessonVideoAccess,
+  resolveBlobAccess,
+  resolveBlobReadWriteToken,
+  resolveBlobStoreId,
+} from '../_lib/blob-env.js';
 
 const VIDEO_TYPES = [
   'video/mp4',
@@ -12,29 +18,6 @@ const VIDEO_TYPES = [
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const CACHE_MAX_AGE = 31536000;
 const TOKEN_TTL_MS = 30 * 60 * 1000;
-
-function blobReadWriteToken() {
-  return (
-    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
-    process.env.VERCEL_BLOB_READ_WRITE_TOKEN?.trim() ||
-    ''
-  );
-}
-
-function lessonVideoAccess(clientPayload) {
-  if (clientPayload) {
-    try {
-      const parsed = JSON.parse(clientPayload);
-      if (parsed.access === 'private' || parsed.access === 'public') {
-        return parsed.access;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  const pref = (process.env.BLOB_ACCESS || 'auto').trim().toLowerCase();
-  return pref === 'public' ? 'public' : 'private';
-}
 
 function sanitizePathname(pathname) {
   const raw = String(pathname || 'lesson-video.mp4').replace(/^\/+/, '');
@@ -50,8 +33,7 @@ function sanitizePathname(pathname) {
   return cleaned;
 }
 
-/** Pathname do token deve ser idêntico ao primeiro argumento de upload() no browser. */
-function normalizeUploadPathname(pathname) {
+function lessonVideoPathname(pathname) {
   const safe = sanitizePathname(pathname);
   return safe.startsWith('lesson-videos/') ? safe : `lesson-videos/${safe}`;
 }
@@ -68,9 +50,9 @@ async function assertContentManager(authorization, baseUrl) {
   });
   if (verify.ok) return;
   if (verify.status === 401) {
-    throw new Error('Sessão expirada. Faça login novamente como administrador.');
+    throw new Error('Sessão expirada. Faça login novamente.');
   }
-  throw new Error('Não autorizado para enviar vídeo.');
+  throw new Error('Sem permissão para enviar vídeo.');
 }
 
 export default async function handler(request) {
@@ -78,10 +60,22 @@ export default async function handler(request) {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  const readWriteToken = blobReadWriteToken();
+  const storeId = resolveBlobStoreId();
+  const readWriteToken = resolveBlobReadWriteToken();
+  if (!storeId && !readWriteToken) {
+    return Response.json(
+      {
+        error: 'Configure Uploads_STORE_ID e Uploads_READ_WRITE_TOKEN (Storage → Blob na Vercel).',
+      },
+      { status: 503 },
+    );
+  }
   if (!readWriteToken) {
     return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN ausente no deploy. Conecte o Blob na Vercel e redeploy.' },
+      {
+        error:
+          'handleUpload exige read-write token. Defina Uploads_READ_WRITE_TOKEN ou BLOB_READ_WRITE_TOKEN.',
+      },
       { status: 503 },
     );
   }
@@ -101,16 +95,14 @@ export default async function handler(request) {
       request,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         await assertContentManager(authorization, baseUrl);
-        const access = lessonVideoAccess(clientPayload);
-        const blobPathname = normalizeUploadPathname(pathname);
 
-        // pathname vem do browser (uploadPath); não sobrescrever — evita token inválido.
-        if (normalizeUploadPathname(pathname) !== blobPathname) {
-          console.warn('blob pathname normalizado:', pathname, '->', blobPathname);
+        const blobPath = lessonVideoPathname(pathname);
+        if (blobPath !== pathname.replace(/^\/+/, '')) {
+          console.warn('blob pathname:', pathname, '→', blobPath);
         }
 
         return {
-          access,
+          access: lessonVideoAccess(clientPayload) || resolveBlobAccess(),
           allowedContentTypes: VIDEO_TYPES,
           maximumSizeInBytes: MAX_VIDEO_BYTES,
           addRandomSuffix: true,

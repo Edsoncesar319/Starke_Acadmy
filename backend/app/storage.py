@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
+from .blob_config import resolve_blob_access, resolve_blob_read_write_token
+
 UPLOAD_DIR = Path(
     os.getenv(
         "UPLOAD_DIR",
@@ -23,7 +25,7 @@ VERCEL_MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 
 
 def blob_storage_enabled() -> bool:
-    return bool(os.getenv("BLOB_READ_WRITE_TOKEN", "").strip())
+    return bool(resolve_blob_read_write_token())
 
 
 def on_vercel() -> bool:
@@ -42,11 +44,7 @@ def _blob_access_preference() -> str:
 
 
 def lesson_video_blob_access() -> str:
-    """Default private (stores Vercel atuais); use BLOB_ACCESS=public se o store for público."""
-    preference = _blob_access_preference()
-    if preference == "public":
-        return "public"
-    return "private"
+    return resolve_blob_access()
 
 
 def resolve_blob_redirect_url(pathname: str) -> str | None:
@@ -56,7 +54,8 @@ def resolve_blob_redirect_url(pathname: str) -> str | None:
     from vercel.blob import BlobClient
 
     clean = pathname.lstrip("/")
-    with BlobClient() as client:
+    token = resolve_blob_read_write_token()
+    with BlobClient(token=token) as client:
         try:
             meta = client.head(clean)
         except Exception:
@@ -74,37 +73,29 @@ def _public_media_url(pathname: str) -> str:
 def _upload_to_blob(*, blob_path: str, content: bytes, content_type: str) -> str:
     from vercel.blob import BlobClient
 
-    preference = _blob_access_preference()
-    modes: list[str]
-    if preference == "auto":
-        modes = ["private", "public"]
-    else:
-        modes = [preference]
+    access = resolve_blob_access()
+    token = resolve_blob_read_write_token()
+    if not token:
+        raise RuntimeError(
+            "BLOB_READ_WRITE_TOKEN ou Uploads_READ_WRITE_TOKEN ausente. "
+            "Conecte o store Uploads na Vercel."
+        )
 
-    last_error: Exception | None = None
-    with BlobClient() as client:
-        for access in modes:
-            try:
-                uploaded = client.put(
-                    blob_path,
-                    content,
-                    access=access,  # type: ignore[arg-type]
-                    content_type=content_type,
-                    add_random_suffix=True,
-                )
-                if access == "private" or ".private.blob." in uploaded.url:
-                    return _public_media_url(uploaded.pathname)
-                return uploaded.url
-            except Exception as exc:
-                message = str(exc).lower()
-                if access == "public" and "private store" in message:
-                    last_error = exc
-                    continue
-                raise
+    try:
+        with BlobClient(token=token) as client:
+            uploaded = client.put(
+                blob_path,
+                content,
+                access=access,  # type: ignore[arg-type]
+                content_type=content_type,
+                add_random_suffix=True,
+            )
+    except Exception as exc:
+        raise RuntimeError("Falha ao enviar arquivo para o Vercel Blob.") from exc
 
-    if last_error:
-        raise last_error
-    raise RuntimeError("Falha ao enviar arquivo para o Vercel Blob.")
+    if access == "private" or ".private.blob." in uploaded.url:
+        return _public_media_url(uploaded.pathname)
+    return uploaded.url
 
 
 async def store_public_file(
@@ -176,7 +167,8 @@ def list_blob_prefix(*, prefix: str, limit: int = 20) -> list[dict[str, str | in
     from vercel.blob import BlobClient
 
     items: list[dict[str, str | int]] = []
-    with BlobClient() as client:
+    token = resolve_blob_read_write_token()
+    with BlobClient(token=token) as client:
         result = client.list_objects(prefix=prefix, limit=limit)
         for blob in result.blobs:
             items.append(
@@ -193,7 +185,8 @@ def fetch_blob_bytes(pathname: str) -> tuple[bytes, str]:
     from vercel.blob import BlobClient
 
     clean = pathname.lstrip("/")
-    with BlobClient() as client:
+    token = resolve_blob_read_write_token()
+    with BlobClient(token=token) as client:
         for access in ("private", "public"):
             try:
                 result = client.get(clean, access=access)  # type: ignore[arg-type]

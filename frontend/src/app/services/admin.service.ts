@@ -358,12 +358,12 @@ export class AdminService {
   }
 
   private blobResultToMediaUrl(result: { url: string; pathname?: string | null }): string {
+    if (result.url.includes('.public.blob.vercel-storage.com')) {
+      return result.url;
+    }
     const pathname = result.pathname?.replace(/^\//, '');
     if (pathname) {
       return `${this.apiUrl}/media/${pathname}`;
-    }
-    if (result.url.includes('.public.blob.vercel-storage.com')) {
-      return result.url;
     }
     if (result.url.startsWith('/api/media/')) {
       return result.url;
@@ -383,22 +383,38 @@ export class AdminService {
       throw new Error(validationMessage);
     }
 
-    const fitsServerLimit = file.size <= SERVER_VIDEO_UPLOAD_BYTES;
-
-    if (fitsServerLimit || !environment.useBlobClientUpload) {
-      try {
-        return await this.uploadLessonVideoViaServer(file);
-      } catch (serverErr) {
-        if (fitsServerLimit && environment.useBlobClientUpload) {
-          return this.uploadLessonVideoViaBlob(file);
+    if (environment.useBlobClientUpload && 'blobPutUrl' in environment) {
+      const fitsDirectPut = file.size <= SERVER_VIDEO_UPLOAD_BYTES;
+      if (fitsDirectPut) {
+        try {
+          return await this.uploadLessonVideoViaBlobPut(file);
+        } catch {
+          // tenta client upload abaixo
         }
-        const message = this.extractUploadError(serverErr);
-        this.error.set(message);
-        throw new Error(message);
       }
+      return this.uploadLessonVideoViaBlob(file);
     }
 
-    return this.uploadLessonVideoViaBlob(file);
+    return this.uploadLessonVideoViaServer(file);
+  }
+
+  private async uploadLessonVideoViaBlobPut(file: File): Promise<string> {
+    const token = this.auth.token();
+    if (!token) {
+      throw new Error('Faça login para enviar vídeo.');
+    }
+
+    const putUrl = 'blobPutUrl' in environment ? environment.blobPutUrl : '/api/vercel-blob-put';
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    const response = await firstValueFrom(
+      this.http.post<{ video_url: string }>(putUrl, formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
+    this.status.set('Vídeo enviado ao Vercel Blob.');
+    return response.video_url;
   }
 
   private async uploadLessonVideoViaServer(file: File): Promise<string> {
@@ -407,7 +423,7 @@ export class AdminService {
     const response = await firstValueFrom(
       this.http.post<{ video_url: string }>(`${this.apiUrl}/admin/lessons/upload-video`, formData),
     );
-    this.status.set('Vídeo enviado ao Vercel Blob (via servidor).');
+    this.status.set('Vídeo enviado com sucesso.');
     return response.video_url;
   }
 
@@ -450,30 +466,34 @@ export class AdminService {
       throw new Error(message);
     }
 
-    const access: 'public' | 'private' =
-      environment.blobVideoAccess === 'public' ? 'public' : 'private';
     const uploadPath = lessonVideoBlobPath(file.name);
     const contentType =
       file.type && BLOB_VIDEO_TYPES.includes(file.type) ? file.type : guessVideoContentType(uploadPath);
 
-    try {
-      const result = await upload(uploadPath, file, {
-        access,
-        clientPayload: JSON.stringify({ access }),
-        handleUploadUrl: environment.blobClientUploadUrl,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        multipart: file.size > 4 * 1024 * 1024,
-        contentType,
-      });
-      this.status.set('Vídeo da aula enviado com sucesso.');
-      return this.blobResultToMediaUrl(result);
-    } catch (err) {
-      const message = this.extractBlobUploadError(err);
-      this.error.set(message);
-      throw new Error(message);
+    const accessModes: Array<'public' | 'private'> =
+      environment.blobVideoAccess === 'public' ? ['public', 'private'] : ['private', 'public'];
+
+    let lastError: Error | null = null;
+    for (const access of accessModes) {
+      try {
+        const result = await upload(uploadPath, file, {
+          access,
+          clientPayload: JSON.stringify({ access }),
+          handleUploadUrl: environment.blobClientUploadUrl,
+          headers: { Authorization: `Bearer ${token}` },
+          multipart: file.size > 4 * 1024 * 1024,
+          contentType,
+        });
+        this.status.set('Vídeo da aula enviado com sucesso.');
+        return this.blobResultToMediaUrl(result);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
     }
+
+    const message = this.extractBlobUploadError(lastError);
+    this.error.set(message);
+    throw new Error(message);
   }
 
   private extractBlobUploadError(err: unknown): string {
@@ -486,8 +506,8 @@ export class AdminService {
 
     if (text.includes('Access denied') || text.includes('valid token')) {
       return (
-        'Upload Blob recusado: confira BLOB_READ_WRITE_TOKEN na Vercel, faça redeploy e use store ' +
-        'private (padrão) ou defina BLOB_ACCESS=public se o store for público.'
+        'Blob recusou o token. Na Vercel: conecte o store "Uploads", use Uploads_READ_WRITE_TOKEN ' +
+        'ou BLOB_READ_WRITE_TOKEN, Uploads_STORE_ID, BLOB_ACCESS=public se o store for público, e redeploy.'
       );
     }
     if (text) {

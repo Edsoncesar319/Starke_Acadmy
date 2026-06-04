@@ -1440,17 +1440,24 @@ def authorize_lesson_video_blob_upload(_: User = Depends(get_current_content_man
 @app.get("/admin/blob/status")
 def admin_blob_status(_: User = Depends(get_current_content_manager)):
     """Diagnóstico: confirma token e lista arquivos no store."""
-    enabled = blob_storage_enabled()
+    from .blob_config import resolve_blob_read_write_token, resolve_blob_store_id
+
+    token = resolve_blob_read_write_token()
+    enabled = bool(token)
     lesson_videos = list_blob_prefix(prefix="lesson-videos/", limit=50) if enabled else []
+    store_id = resolve_blob_store_id()
     return {
         "blob_storage": enabled,
+        "store_id_set": bool(store_id),
+        "store_id_prefix": store_id[:12] + "…" if len(store_id) > 12 else store_id,
+        "token_prefix": token[:20] + "…" if len(token) > 20 else "",
         "lesson_videos_count": len(lesson_videos),
         "lesson_videos_sample": lesson_videos[:10],
         "hint": (
-            "Vídeos ≤ 4 MB na Vercel vão pelo servidor (/admin/lessons/upload-video). "
-            "Maiores usam /api/vercel-blob-upload."
+            "Upload: /api/vercel-blob-put (≤4 MB) ou /api/vercel-blob-upload (maiores). "
+            "Env: BLOB_READ_WRITE_TOKEN ou Uploads_READ_WRITE_TOKEN + Uploads_STORE_ID."
             if on_vercel()
-            else "Com BLOB_READ_WRITE_TOKEN, uploads vão direto ao Blob."
+            else "Defina BLOB_READ_WRITE_TOKEN no .env."
         ),
     }
 
