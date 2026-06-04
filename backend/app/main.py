@@ -31,6 +31,7 @@ from .storage import (
     on_vercel,
     upload_avatar_or_course_image,
     fetch_blob_bytes,
+    list_blob_prefix,
     resolve_blob_redirect_url,
     upload_lesson_pdf,
     upload_lesson_video,
@@ -1432,8 +1433,26 @@ def admin_delete_lesson(
 
 @app.get("/admin/blob/upload-authorize")
 def authorize_lesson_video_blob_upload(_: User = Depends(get_current_content_manager)):
-    """Legado: autorização de client upload (agora feita em /blob-client-upload)."""
+    """Autorização para client upload (função /api/vercel-blob-upload)."""
     return {"ok": True}
+
+
+@app.get("/admin/blob/status")
+def admin_blob_status(_: User = Depends(get_current_content_manager)):
+    """Diagnóstico: confirma token e lista arquivos no store."""
+    enabled = blob_storage_enabled()
+    lesson_videos = list_blob_prefix(prefix="lesson-videos/", limit=50) if enabled else []
+    return {
+        "blob_storage": enabled,
+        "lesson_videos_count": len(lesson_videos),
+        "lesson_videos_sample": lesson_videos[:10],
+        "hint": (
+            "Vídeos ≤ 4 MB na Vercel vão pelo servidor (/admin/lessons/upload-video). "
+            "Maiores usam /api/vercel-blob-upload."
+            if on_vercel()
+            else "Com BLOB_READ_WRITE_TOKEN, uploads vão direto ao Blob."
+        ),
+    }
 
 
 @app.post("/blob-client-upload", deprecated=True)

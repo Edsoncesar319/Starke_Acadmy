@@ -4,7 +4,11 @@ import { upload } from '@vercel/blob/client';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
-import { lessonVideoBlobPath, videoValidationError } from '../utils/video-upload.util';
+import {
+  lessonVideoBlobPath,
+  SERVER_VIDEO_UPLOAD_BYTES,
+  videoValidationError,
+} from '../utils/video-upload.util';
 import { AuthService } from './auth.service';
 
 const BLOB_VIDEO_TYPES = [
@@ -354,15 +358,15 @@ export class AdminService {
   }
 
   private blobResultToMediaUrl(result: { url: string; pathname?: string | null }): string {
+    const pathname = result.pathname?.replace(/^\//, '');
+    if (pathname) {
+      return `${this.apiUrl}/media/${pathname}`;
+    }
     if (result.url.includes('.public.blob.vercel-storage.com')) {
       return result.url;
     }
     if (result.url.startsWith('/api/media/')) {
       return result.url;
-    }
-    const pathname = result.pathname?.replace(/^\//, '');
-    if (pathname) {
-      return `${this.apiUrl}/media/${pathname}`;
     }
     const fromBlob = result.url.match(/blob\.vercel-storage\.com\/(.+)$/);
     if (fromBlob?.[1]) {
@@ -379,23 +383,32 @@ export class AdminService {
       throw new Error(validationMessage);
     }
 
-    if (environment.useBlobClientUpload) {
-      return this.uploadLessonVideoViaBlob(file);
+    const fitsServerLimit = file.size <= SERVER_VIDEO_UPLOAD_BYTES;
+
+    if (fitsServerLimit || !environment.useBlobClientUpload) {
+      try {
+        return await this.uploadLessonVideoViaServer(file);
+      } catch (serverErr) {
+        if (fitsServerLimit && environment.useBlobClientUpload) {
+          return this.uploadLessonVideoViaBlob(file);
+        }
+        const message = this.extractUploadError(serverErr);
+        this.error.set(message);
+        throw new Error(message);
+      }
     }
 
+    return this.uploadLessonVideoViaBlob(file);
+  }
+
+  private async uploadLessonVideoViaServer(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file, file.name);
-    try {
-      const response = await firstValueFrom(
-        this.http.post<{ video_url: string }>(`${this.apiUrl}/admin/lessons/upload-video`, formData),
-      );
-      this.status.set('Vídeo da aula enviado com sucesso.');
-      return response.video_url;
-    } catch (err) {
-      const message = this.extractUploadError(err);
-      this.error.set(message);
-      throw new Error(message);
-    }
+    const response = await firstValueFrom(
+      this.http.post<{ video_url: string }>(`${this.apiUrl}/admin/lessons/upload-video`, formData),
+    );
+    this.status.set('Vídeo enviado ao Vercel Blob (via servidor).');
+    return response.video_url;
   }
 
   async uploadLessonPdf(file: File): Promise<string> {

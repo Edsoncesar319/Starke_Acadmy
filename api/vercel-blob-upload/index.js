@@ -104,12 +104,16 @@ export default async function handler(request) {
         const access = lessonVideoAccess(clientPayload);
         const blobPathname = normalizeUploadPathname(pathname);
 
+        // pathname vem do browser (uploadPath); não sobrescrever — evita token inválido.
+        if (normalizeUploadPathname(pathname) !== blobPathname) {
+          console.warn('blob pathname normalizado:', pathname, '->', blobPathname);
+        }
+
         return {
           access,
           allowedContentTypes: VIDEO_TYPES,
           maximumSizeInBytes: MAX_VIDEO_BYTES,
           addRandomSuffix: true,
-          pathname: blobPathname,
           cacheControlMaxAge: CACHE_MAX_AGE,
           validUntil: Date.now() + TOKEN_TTL_MS,
         };

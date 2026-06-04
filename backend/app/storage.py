@@ -77,7 +77,7 @@ def _upload_to_blob(*, blob_path: str, content: bytes, content_type: str) -> str
     preference = _blob_access_preference()
     modes: list[str]
     if preference == "auto":
-        modes = ["public", "private"]
+        modes = ["private", "public"]
     else:
         modes = [preference]
 
@@ -167,6 +167,26 @@ async def upload_lesson_pdf(content: bytes, extension: str, content_type: str) -
         local_dir=UPLOAD_DIR,
         public_url_path="/uploads",
     )
+
+
+def list_blob_prefix(*, prefix: str, limit: int = 20) -> list[dict[str, str | int]]:
+    """Lista objetos no store (diagnóstico)."""
+    if not blob_storage_enabled():
+        return []
+    from vercel.blob import BlobClient
+
+    items: list[dict[str, str | int]] = []
+    with BlobClient() as client:
+        result = client.list_objects(prefix=prefix, limit=limit)
+        for blob in result.blobs:
+            items.append(
+                {
+                    "pathname": blob.pathname,
+                    "size": blob.size,
+                    "url": blob.url,
+                }
+            )
+    return items
 
 
 def fetch_blob_bytes(pathname: str) -> tuple[bytes, str]:
