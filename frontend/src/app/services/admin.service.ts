@@ -253,24 +253,45 @@ export class AdminService {
 
   async createLesson(payload: AdminLessonCreate): Promise<void> {
     this.error.set(null);
-    await firstValueFrom(this.http.post(`${this.apiUrl}/admin/lessons`, payload));
-    this.status.set(`Aula "${payload.title}" criada.`);
-    await this.loadLessons(payload.course_id);
+    try {
+      await firstValueFrom(
+        this.http.post(`${this.apiUrl}/admin/lessons`, {
+          course_id: payload.course_id,
+          module_name: payload.module_name.trim(),
+          title: payload.title.trim(),
+          video_url: (payload.video_url || '').trim(),
+          content_md: (payload.content_md || '').trim(),
+          pdf_url: payload.pdf_url?.trim() || null,
+        }),
+      );
+      this.status.set(`Aula "${payload.title.trim()}" criada.`);
+      await this.loadLessons(payload.course_id);
+    } catch (err) {
+      const message = this.formatApiError(err, 'Não foi possível criar a aula.');
+      this.error.set(message);
+      throw new Error(message);
+    }
   }
 
   async updateLesson(lesson: AdminLesson): Promise<void> {
     this.error.set(null);
-    await firstValueFrom(
-      this.http.put(`${this.apiUrl}/admin/lessons/${lesson.id}`, {
-        module_name: lesson.module_name.trim(),
-        title: lesson.title.trim(),
-        video_url: lesson.video_url.trim(),
-        content_md: lesson.content_md.trim(),
-        pdf_url: lesson.pdf_url?.trim() || null,
-      }),
-    );
-    this.status.set(`Aula "${lesson.title}" atualizada.`);
-    await this.loadLessons(lesson.course_id);
+    try {
+      await firstValueFrom(
+        this.http.put(`${this.apiUrl}/admin/lessons/${lesson.id}`, {
+          module_name: lesson.module_name.trim(),
+          title: lesson.title.trim(),
+          video_url: (lesson.video_url || '').trim(),
+          content_md: lesson.content_md.trim(),
+          pdf_url: lesson.pdf_url?.trim() || null,
+        }),
+      );
+      this.status.set(`Aula "${lesson.title}" atualizada.`);
+      await this.loadLessons(lesson.course_id);
+    } catch (err) {
+      const message = this.formatApiError(err, 'Não foi possível salvar a aula.');
+      this.error.set(message);
+      throw new Error(message);
+    }
   }
 
   async deleteLesson(lesson: AdminLesson): Promise<void> {

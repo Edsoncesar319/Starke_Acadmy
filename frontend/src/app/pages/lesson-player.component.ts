@@ -53,8 +53,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             <div class="space-y-3">
               <label class="block text-xs text-slate-400">Curso</label>
               <select
-                [(ngModel)]="selectedCourseId"
-                (ngModelChange)="onAdminCourseChange()"
+                [ngModel]="selectedCourseId()"
+                (ngModelChange)="onSelectedCourseIdChange($event)"
                 name="adminCourse"
                 class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-3 py-2 text-sm"
               >
@@ -110,7 +110,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                 }
                 <button
                   type="submit"
-                  [disabled]="!selectedCourseId || videoUploading()"
+                  [disabled]="!selectedCourseId() || videoUploading()"
                   class="rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
                 >
                   Criar aula
@@ -225,8 +225,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
           @if (auth.isStudent()) {
             <label class="mb-2 block text-xs text-slate-400">Meu curso</label>
             <select
-              [(ngModel)]="selectedCourseId"
-              (ngModelChange)="onStudentCourseChange()"
+              [ngModel]="selectedCourseId()"
+              (ngModelChange)="onSelectedCourseIdChange($event, true)"
               name="studentCourse"
               class="mb-4 w-full rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
             >
@@ -564,6 +564,15 @@ export class LessonPlayerComponent implements OnInit, OnDestroy {
     await this.data.refreshEnrollments();
   }
 
+  onSelectedCourseIdChange(courseId: number | null, forStudent = false): void {
+    this.selectedCourseId.set(courseId);
+    if (forStudent) {
+      void this.onStudentCourseChange();
+      return;
+    }
+    void this.onAdminCourseChange();
+  }
+
   async onAdminCourseChange(): Promise<void> {
     const courseId = this.selectedCourseId();
     if (!courseId) return;
@@ -709,6 +718,17 @@ export class LessonPlayerComponent implements OnInit, OnDestroy {
     this.videoUploading.set(true);
     try {
       this.newLesson.video_url = await this.admin.uploadLessonVideo(file);
+      if (
+        this.selectedCourseId() &&
+        this.newLesson.module_name.trim() &&
+        this.newLesson.title.trim()
+      ) {
+        await this.createLesson();
+      } else if (!this.newLesson.module_name.trim() || !this.newLesson.title.trim()) {
+        this.admin.status.set(
+          'Vídeo enviado. Preencha módulo e título e clique em "Criar aula" para salvar.',
+        );
+      }
     } catch {
       // handled by service
     } finally {
@@ -763,16 +783,23 @@ export class LessonPlayerComponent implements OnInit, OnDestroy {
 
   async createLesson(): Promise<void> {
     const courseId = this.selectedCourseId();
-    if (!courseId) return;
-    await this.admin.createLesson({
-      course_id: courseId,
-      module_name: this.newLesson.module_name,
-      title: this.newLesson.title,
-      content_md: this.newLesson.content_md,
-      video_url: this.newLesson.video_url,
-      pdf_url: this.newLesson.pdf_url || null,
-    });
-    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
+    if (!courseId) {
+      this.admin.error.set('Selecione um curso antes de criar a aula.');
+      return;
+    }
+    try {
+      await this.admin.createLesson({
+        course_id: courseId,
+        module_name: this.newLesson.module_name,
+        title: this.newLesson.title,
+        content_md: this.newLesson.content_md,
+        video_url: this.newLesson.video_url,
+        pdf_url: this.newLesson.pdf_url || null,
+      });
+      this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
+    } catch {
+      // AdminService já preenche error/status
+    }
   }
 
   async saveQuizForLesson(lessonId: number, editor?: LessonQuizEditorComponent): Promise<void> {

@@ -1,5 +1,6 @@
-import os
 import json
+import mimetypes
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -1337,7 +1338,15 @@ def admin_create_lesson(
     db.add(lesson)
     db.commit()
     db.refresh(lesson)
-    ensure_lesson_quiz(db, lesson.id)
+    try:
+        ensure_lesson_quiz(db, lesson.id)
+    except Exception as exc:
+        # Aula já persistida; quiz padrão pode ser criado depois.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Quiz padrão não criado para aula %s: %s", lesson.id, exc
+        )
     return lesson
 
 
@@ -1512,9 +1521,9 @@ def _resolve_public_dir() -> Path | None:
     task_root = Path("/var/task")
 
     candidates: list[Path] = [
-        app_dir / "branding" / "portal",
-        app_dir / "public",
         repo_root / "public",
+        app_dir / "public",
+        app_dir / "branding" / "portal",
         backend_root / "public",
         backend_root / "app" / "public",
         backend_root / "backend" / "app" / "public",
@@ -1600,6 +1609,37 @@ async def portal_favicon():
     raise HTTPException(status_code=404, detail="favicon not found")
 
 
+_STATIC_ASSET_SUFFIXES = frozenset(
+    {
+        ".js",
+        ".mjs",
+        ".css",
+        ".map",
+        ".json",
+        ".ico",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".svg",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".txt",
+        ".webmanifest",
+    }
+)
+
+
+def _looks_like_static_asset(relative_path: str) -> bool:
+    return Path(relative_path).suffix.lower() in _STATIC_ASSET_SUFFIXES
+
+
+def _media_type_for(path: Path) -> str:
+    media_type, _ = mimetypes.guess_type(str(path))
+    return media_type or "application/octet-stream"
+
+
 def _safe_public_file(public: Path, relative_path: str) -> Path | None:
     clean = relative_path.replace("\\", "/").lstrip("/")
     if not clean or ".." in clean.split("/"):
@@ -1638,11 +1678,17 @@ async def _serve_portal_path(full_path: str):
     if full_path and full_path != "favicon.ico":
         asset = _safe_public_file(public, full_path)
         if asset:
-            return FileResponse(asset)
+            return FileResponse(asset, media_type=_media_type_for(asset))
+        if _looks_like_static_asset(full_path):
+            raise HTTPException(status_code=404, detail="Not found")
 
     index = public / "index.html"
     if index.is_file():
-        return FileResponse(index, media_type="text/html")
+        return FileResponse(
+            index,
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
 
     raise HTTPException(status_code=404, detail="Not found")
 

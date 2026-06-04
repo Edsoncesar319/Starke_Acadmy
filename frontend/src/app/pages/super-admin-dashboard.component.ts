@@ -836,16 +836,27 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   }
 
   async createLesson(): Promise<void> {
-    if (!this.lessonCourseId) return;
-    await this.admin.createLesson({
-      course_id: this.lessonCourseId,
-      module_name: this.newLesson.module_name,
-      title: this.newLesson.title,
-      content_md: this.newLesson.content_md,
-      video_url: this.newLesson.video_url,
-      pdf_url: this.newLesson.pdf_url || null,
-    });
-    this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
+    if (!this.lessonCourseId) {
+      this.admin.error.set('Selecione um curso antes de criar a aula.');
+      return;
+    }
+    if (!this.newLesson.module_name.trim() || !this.newLesson.title.trim()) {
+      this.admin.error.set('Preencha módulo e título antes de criar a aula.');
+      return;
+    }
+    try {
+      await this.admin.createLesson({
+        course_id: this.lessonCourseId,
+        module_name: this.newLesson.module_name,
+        title: this.newLesson.title,
+        content_md: this.newLesson.content_md,
+        video_url: this.newLesson.video_url,
+        pdf_url: this.newLesson.pdf_url || null,
+      });
+      this.newLesson = { module_name: '', title: '', content_md: '', video_url: '', pdf_url: '' };
+    } catch {
+      // AdminService já define admin.error
+    }
   }
 
   toggleQuizEditor(lessonId: number): void {
@@ -910,6 +921,17 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     this.videoUploading.set(true);
     try {
       this.newLesson.video_url = await this.admin.uploadLessonVideo(file);
+      if (
+        this.lessonCourseId &&
+        this.newLesson.module_name.trim() &&
+        this.newLesson.title.trim()
+      ) {
+        await this.createLesson();
+      } else if (!this.newLesson.module_name.trim() || !this.newLesson.title.trim()) {
+        this.admin.status.set(
+          'Vídeo enviado. Preencha módulo e título e clique em "Criar aula" para salvar.',
+        );
+      }
     } catch {
       // handled by AdminService
     } finally {

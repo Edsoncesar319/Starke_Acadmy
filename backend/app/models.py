@@ -55,9 +55,9 @@ class Lesson(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
     module_name: Mapped[str] = mapped_column(String(120), nullable=False)
     title: Mapped[str] = mapped_column(String(180), nullable=False)
-    video_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    video_url: Mapped[str] = mapped_column(Text, nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
-    pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     course = relationship("Course", back_populates="lessons")
     quiz_questions = relationship(
