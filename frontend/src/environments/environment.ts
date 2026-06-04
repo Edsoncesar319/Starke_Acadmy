@@ -1,7 +1,8 @@
 export const environment = {
   production: false,
   apiUrl: 'http://127.0.0.1:8000/api',
-  /** Upload direto ao Blob (obrigatório na Vercel para vídeos > 4 MB). */
+  /** Ative com BLOB_READ_WRITE_TOKEN local para testar upload direto. */
   useBlobClientUpload: false,
   blobClientUploadUrl: '/api/blob-client-upload',
+  blobVideoAccess: 'public' as const,
 };

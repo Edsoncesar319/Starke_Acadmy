@@ -41,6 +41,31 @@ def _blob_access_preference() -> str:
     return "auto"
 
 
+def lesson_video_blob_access() -> str:
+    """Prefer public blobs for direct CDN playback; honor explicit private stores."""
+    preference = _blob_access_preference()
+    if preference == "private":
+        return "private"
+    return "public"
+
+
+def resolve_blob_redirect_url(pathname: str) -> str | None:
+    """Return a CDN URL when the blob is publicly readable (skip API proxy)."""
+    if not blob_storage_enabled():
+        return None
+    from vercel.blob import BlobClient
+
+    clean = pathname.lstrip("/")
+    with BlobClient() as client:
+        try:
+            meta = client.head(clean)
+        except Exception:
+            return None
+    if ".public.blob.vercel-storage.com" in meta.url:
+        return meta.url
+    return None
+
+
 def _public_media_url(pathname: str) -> str:
     clean = pathname.lstrip("/")
     return f"{API_PUBLIC_BASE_URL}/media/{clean}"

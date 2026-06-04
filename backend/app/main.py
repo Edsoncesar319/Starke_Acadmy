@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from uuid import uuid4
 
 from .auth import (
+    build_access_token_claims,
     create_access_token,
     get_current_admin,
     get_current_content_manager,
@@ -30,6 +31,7 @@ from .storage import (
     on_vercel,
     upload_avatar_or_course_image,
     fetch_blob_bytes,
+    resolve_blob_redirect_url,
     upload_lesson_pdf,
     upload_lesson_video,
 )
@@ -190,6 +192,17 @@ def serve_blob_media(asset_path: str, request: Request):
         raise HTTPException(status_code=404, detail="Media storage unavailable")
     if ".." in asset_path.split("/"):
         raise HTTPException(status_code=400, detail="Invalid path")
+
+    direct_url = resolve_blob_redirect_url(asset_path)
+    if direct_url:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(
+            direct_url,
+            status_code=302,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
     try:
         content, content_type = fetch_blob_bytes(asset_path)
     except FileNotFoundError:
@@ -262,7 +275,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token(build_access_token_claims(user))
     return Token(access_token=token)
 
 

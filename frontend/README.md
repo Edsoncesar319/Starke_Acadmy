@@ -17,11 +17,13 @@ Angular 17 + FastAPI. Em produção, frontend e API rodam no mesmo domínio Verc
 
 Sem Postgres, a API usa SQLite em `/tmp` (dados podem sumir entre deploys).
 
-### Upload de vídeo (> 4 MB)
+### Upload de vídeo
 
-Na Vercel, vídeos grandes usam **upload direto ao Blob** (`@vercel/blob/client` + `api/blob-client-upload.js`).  
-Conecte o **Blob** no painel e defina `BLOB_READ_WRITE_TOKEN`. Arquivos até **100 MB** (MP4, WEBM, MOV).  
-Em desenvolvimento local, uploads ≤ 4 MB vão pelo backend; acima disso, ative Blob local ou use URL externa.
+Na Vercel, vídeos usam **upload direto ao Blob** (`@vercel/blob/client` + `api/blob-client-upload`), sem passar pelo backend Python.  
+Conecte o **Blob** no painel, defina `BLOB_READ_WRITE_TOKEN` e `AUTH_SECRET_KEY`. Arquivos até **100 MB** (MP4, WEBM, MOV).  
+URLs públicas do Blob vão direto à CDN (`blobVideoAccess: 'public'`). Faça login de novo após deploy (claim JWT `cm`).
+
+Em desenvolvimento local, o padrão é upload pelo backend; ative `useBlobClientUpload` e Blob local para testar o fluxo direto.
 
 ## Desenvolvimento local
 

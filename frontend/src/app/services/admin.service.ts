@@ -4,7 +4,7 @@ import { upload } from '@vercel/blob/client';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
-import { SERVER_VIDEO_UPLOAD_BYTES, videoValidationError } from '../utils/video-upload.util';
+import { videoValidationError } from '../utils/video-upload.util';
 import { AuthService } from './auth.service';
 
 export interface AdminCourse {
@@ -421,13 +421,15 @@ export class AdminService {
     }
 
     try {
+      const blobAccess = environment.blobVideoAccess === 'private' ? 'private' : 'public';
+
       const result = await upload(file.name, file, {
-        access: 'private',
+        access: blobAccess,
         handleUploadUrl: environment.blobClientUploadUrl,
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        multipart: file.size > 8 * 1024 * 1024,
+        multipart: file.size > 4 * 1024 * 1024,
         contentType: file.type || undefined,
       });
       this.status.set('Vídeo da aula enviado com sucesso.');

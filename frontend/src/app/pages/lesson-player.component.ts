@@ -607,7 +607,9 @@ export class LessonPlayerComponent implements OnInit, OnDestroy {
     if (!url?.trim()) return false;
     return (
       url.includes('/uploads/videos/') ||
+      url.includes('/media/') ||
       url.includes('.public.blob.vercel-storage.com') ||
+      url.includes('.private.blob.vercel-storage.com') ||
       url.startsWith('blob:') ||
       /\.(mp4|webm|mov)(\?|$)/i.test(url)
     );

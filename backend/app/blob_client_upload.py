@@ -11,6 +11,8 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from .storage import lesson_video_blob_access
+
 VIDEO_TYPES = [
     "video/mp4",
     "video/webm",
@@ -87,11 +89,12 @@ def _handle_generate_client_token(body: dict[str, Any]) -> dict[str, Any]:
     client_token = _generate_client_token(
         read_write_token=read_write_token,
         options={
-            "access": "private",
+            "access": lesson_video_blob_access(),
             "allowedContentTypes": VIDEO_TYPES,
             "maximumSizeInBytes": MAX_VIDEO_BYTES,
             "addRandomSuffix": True,
             "pathname": pathname,
+            "cacheControlMaxAge": 31536000,
         },
     )
     return {"type": "blob.generate-client-token", "clientToken": client_token}
