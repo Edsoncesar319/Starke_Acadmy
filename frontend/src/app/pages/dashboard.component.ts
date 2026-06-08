@@ -12,10 +12,10 @@ import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/pay
   standalone: true,
   imports: [NgClass, FormsModule],
   template: `
-    <section class="space-y-6">
-      <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
+    <section class="page-section">
+      <div class="panel-header">
         <p class="text-gold-300">Bem-vindo(a) de volta, {{ data.student().name }}</p>
-        <h3 class="mt-2 text-2xl font-semibold">Tarefas pendentes: {{ pendingTasks() }}</h3>
+        <h3 class="mt-2 text-xl font-semibold sm:text-2xl">Tarefas pendentes: {{ pendingTasks() }}</h3>
         @if (data.status()) {
           <p class="mt-2 text-sm text-gold-300">{{ data.status() }}</p>
         }
@@ -177,7 +177,7 @@ import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/pay
         </div>
         <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
           <h4 class="mb-3 text-gold-300">Explore nichos</h4>
-          <div class="grid grid-cols-3 gap-2 text-xs text-slate-300">
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-3">
             @for (niche of niches; track niche) {
               <span class="rounded-lg border border-gold-500/20 bg-obsidian-600/60 px-3 py-2 text-center">{{ niche }}</span>
             }

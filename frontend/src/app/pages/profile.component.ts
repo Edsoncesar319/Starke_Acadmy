@@ -8,8 +8,8 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <section class="mx-auto max-w-2xl space-y-6">
-      <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
+    <section class="page-section mx-auto max-w-2xl">
+      <div class="panel-header">
         <h1 class="text-2xl font-semibold text-gold-300">Editar Perfil</h1>
         <p class="mt-1 text-sm text-slate-300">Atualize seus dados de aluno na Starke Academy.</p>
       </div>
@@ -21,7 +21,7 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
         <p class="rounded-lg border border-red-400/30 bg-red-900/20 px-4 py-2 text-sm text-red-300">{{ data.error() }}</p>
       }
 
-      <form class="space-y-4 rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-6" (ngSubmit)="save()">
+      <form class="panel space-y-4" (ngSubmit)="save()">
         <div class="flex flex-wrap items-center gap-4">
           <div class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/40 bg-gold-500/10 text-lg font-semibold text-gold-300">
             @if (data.student().avatarUrl) {
@@ -86,7 +86,7 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
         </button>
       </form>
 
-      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-6">
+      <article class="panel">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-lg font-medium text-gold-300">Minhas compras</h2>

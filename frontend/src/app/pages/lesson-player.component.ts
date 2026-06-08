@@ -27,7 +27,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
   standalone: true,
   imports: [NgClass, FormsModule, LessonQuizEditorComponent],
   template: `
-    <section class="space-y-6">
+    <section class="page-section">
       @if (data.error()) {
         <p class="rounded-lg border border-red-400/30 bg-red-900/20 px-4 py-2 text-sm text-red-300">{{ data.error() }}</p>
       }
@@ -39,7 +39,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
       }
 
       @if (isContentManager()) {
-        <article class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
+        <article class="panel-header">
           <h2 class="text-lg font-semibold text-gold-300">Gerenciar vídeo-aulas</h2>
           <p class="mt-1 text-sm text-slate-400">
             @if (isAdmin()) {
@@ -218,8 +218,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
       }
 
       @if (showStudentPlayer()) {
-      <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <aside class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4 xl:col-span-3">
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <aside class="panel lg:col-span-3 xl:col-span-3">
           <h4 class="mb-3 text-gold-300">Reprodutor de Lições</h4>
 
           @if (auth.isStudent()) {
@@ -257,7 +257,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
           }
         </aside>
 
-        <div class="space-y-4 xl:col-span-9">
+        <div class="min-w-0 space-y-4 lg:col-span-9 xl:col-span-9">
           @if (currentLesson(); as lesson) {
             <div class="aspect-video overflow-hidden rounded-xl border border-gold-500/30 bg-black">
               @if (hasPlayableVideo(lesson.videoUrl)) {

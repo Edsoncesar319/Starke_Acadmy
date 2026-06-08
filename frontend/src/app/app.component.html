@@ -1,32 +1,35 @@
-<div class="min-h-screen bg-obsidian-gradient">
+<div class="min-h-[100dvh] overflow-x-hidden bg-obsidian-gradient">
   @if (showShell) {
     <app-side-nav />
     <main
-      class="min-h-screen p-4 transition-all duration-300 ease-in-out sm:p-6"
+      class="main-content min-h-[100dvh] w-full min-w-0 max-w-[100vw] transition-all duration-300 ease-in-out"
       [ngClass]="layout.mainOffsetClass()"
     >
-      <app-top-app-bar
-        [title]="pageTitle()"
-        [studentName]="student().name"
-        [studentLevel]="student().studentLevel"
-        [avatarUrl]="student().avatarUrl"
-        [navCollapsed]="layout.collapsed()"
-        (toggleNav)="layout.toggle()"
-      />
-      <div class="mb-4 flex justify-end">
-        <button
-          (click)="logout()"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10"
-        >
-          <mat-icon class="material-symbols-rounded !h-4 !w-4 !text-base">logout</mat-icon>
-          Sair
-        </button>
+      <div class="page-shell">
+        <app-top-app-bar
+          [title]="pageTitle()"
+          [studentName]="student().name"
+          [studentLevel]="student().studentLevel"
+          [avatarUrl]="student().avatarUrl"
+          [navCollapsed]="layout.collapsed()"
+          (toggleNav)="layout.toggle()"
+        />
+        <div class="mb-4 flex justify-end sm:mb-5">
+          <button
+            type="button"
+            (click)="logout()"
+            class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10"
+          >
+            <mat-icon class="material-symbols-rounded !h-4 !w-4 !text-base">logout</mat-icon>
+            Sair
+          </button>
+        </div>
+        <router-outlet />
       </div>
-      <router-outlet />
-</main>
+    </main>
   } @else {
-    <main class="p-6">
-<router-outlet />
+    <main class="page-auth min-h-[100dvh]">
+      <router-outlet />
     </main>
   }
 </div>

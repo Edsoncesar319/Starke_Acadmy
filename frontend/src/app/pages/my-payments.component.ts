@@ -7,8 +7,8 @@ import { PortalDataService } from '../services/portal-data.service';
   standalone: true,
   imports: [RouterLink],
   template: `
-    <section class="space-y-4">
-      <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
+    <section class="page-section">
+      <div class="panel">
         <h1 class="text-lg font-semibold text-gold-300">Meus pagamentos</h1>
         <p class="mt-1 text-xs text-slate-400">Acompanhe cobranças pendentes e pagamentos aprovados.</p>
       </div>

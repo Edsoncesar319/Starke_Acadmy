@@ -196,7 +196,10 @@ export class AdminService {
       throw new Error('Formato inválido. Use PNG, JPG ou WEBP.');
     }
 
-    const preparedFile = await prepareImageForUpload(file);
+    const preparedFile = await prepareImageForUpload(file, {
+      maxDimension: endpoint.includes('courses') ? 1200 : 1600,
+      maxBytesBeforeResize: endpoint.includes('courses') ? 600 * 1024 : 900 * 1024,
+    });
     if (preparedFile.size > MAX_UPLOAD_BYTES) {
       throw new Error('Imagem muito grande mesmo após compressão. Use um arquivo menor.');
     }

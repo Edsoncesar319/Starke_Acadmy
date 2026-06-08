@@ -4,22 +4,22 @@ import { Component } from '@angular/core';
   selector: 'app-support-center',
   standalone: true,
   template: `
-    <section class="space-y-4">
+    <section class="page-section">
       <input
         placeholder="Buscar na base de conhecimento..."
-        class="w-full rounded-xl border border-gold-500/30 bg-obsidian-700/60 px-4 py-3 text-sm outline-none"
+        class="form-input rounded-xl"
       />
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
         @for (item of categories; track item.title) {
-          <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+          <article class="panel">
             <h4 class="text-gold-300">{{ item.title }}</h4>
             <p class="mt-2 text-sm text-slate-300">{{ item.text }}</p>
           </article>
         }
       </div>
 
-      <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+      <div class="panel">
         <h4 class="mb-3 text-gold-300">Perguntas frequentes</h4>
         @for (faq of faqs; track faq.q) {
           <details class="mb-2 rounded-lg border border-gold-500/20 px-3 py-2">

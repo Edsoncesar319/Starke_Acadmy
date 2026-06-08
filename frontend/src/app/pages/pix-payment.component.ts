@@ -7,8 +7,8 @@ import { PortalDataService } from '../services/portal-data.service';
   standalone: true,
   imports: [RouterLink],
   template: `
-    <section class="mx-auto max-w-3xl space-y-4">
-      <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
+    <section class="page-section mx-auto max-w-3xl">
+      <div class="panel">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 class="text-xl font-semibold text-gold-300">Pagamento via PIX</h1>
@@ -41,7 +41,7 @@ import { PortalDataService } from '../services/portal-data.service';
               <img
                 [src]="'data:image/png;base64,' + pix.qr_code_base64"
                 alt="QR Code PIX"
-                class="h-56 w-56 rounded bg-white p-2"
+                class="h-48 w-48 max-w-full rounded bg-white p-2 sm:h-56 sm:w-56"
               />
             </div>
           </div>

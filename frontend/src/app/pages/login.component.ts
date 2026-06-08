@@ -10,8 +10,8 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   standalone: true,
   imports: [FormsModule, RouterLink, RouterLinkActive, StarkeLogoComponent],
   template: `
-    <section class="mx-auto mt-10 max-w-md">
-      <app-starke-logo size="lg" containerClass="mb-8" />
+    <section class="mx-auto mt-6 w-full max-w-md sm:mt-10">
+      <app-starke-logo variant="login" size="xl" [showTitle]="false" containerClass="mb-8" />
 
       <nav class="mb-6 flex rounded-xl border border-gold-500/25 bg-obsidian-800/80 p-1">
         <a
@@ -32,7 +32,7 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
         </a>
       </nav>
 
-      <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-8 shadow-gold">
+      <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-5 shadow-gold sm:p-8">
       <h1 class="text-2xl font-semibold text-gold-300">Acesso Starke Elite</h1>
       <p class="mt-2 text-sm text-slate-300">Entre para continuar sua jornada premium.</p>
 

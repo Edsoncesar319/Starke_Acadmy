@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, QueryList, ViewChildren, inject, signal }
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
 import { AdminCourse, AdminLesson, AdminService } from '../services/admin.service';
+import { AdaptiveCourseImageComponent } from '../shared/adaptive-course-image.component';
 import { StarkeLogoComponent } from '../shared/starke-logo.component';
 import { LessonQuizEditorComponent } from '../shared/lesson-quiz-editor.component';
 import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
@@ -9,11 +10,11 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 @Component({
   selector: 'app-super-admin-dashboard',
   standalone: true,
-  imports: [FormsModule, StarkeLogoComponent, LessonQuizEditorComponent],
+  imports: [FormsModule, StarkeLogoComponent, LessonQuizEditorComponent, AdaptiveCourseImageComponent],
   template: `
-    <section class="space-y-6 p-6">
-      <header class="rounded-xl border border-gold-500/30 bg-obsidian-700/70 p-6">
-        <div class="flex flex-wrap items-center gap-6">
+    <section class="page-section">
+      <header class="panel-header">
+        <div class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
           <app-starke-logo size="md" [showTitle]="false" />
           <div class="min-w-0 flex-1">
         <h1 class="text-2xl font-semibold text-gold-300">Painel do administrador</h1>
@@ -35,7 +36,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         <p class="rounded-lg border border-red-400/30 bg-red-900/20 px-4 py-2 text-sm text-red-300">{{ admin.error() }}</p>
       }
 
-      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+      <article class="panel">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-lg font-medium text-gold-300">Todos os alunos no banco</h2>
@@ -51,8 +52,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             Nenhum aluno matriculado no banco de dados.
           </p>
         } @else {
-          <div class="max-h-80 overflow-auto rounded-lg border border-gold-500/15">
-            <table class="w-full min-w-[640px] text-left text-sm">
+          <div class="table-wrap max-h-80">
+            <table class="min-w-[640px]">
               <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
                 <tr>
                   <th class="px-4 py-3">ID</th>
@@ -105,7 +106,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         }
       </article>
 
-      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+      <article class="panel">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-lg font-medium text-gold-300">Instrutores</h2>
@@ -121,8 +122,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             Nenhum instrutor cadastrado. Marque um aluno como instrutor em «Editar perfil do aluno».
           </p>
         } @else {
-          <div class="max-h-64 overflow-auto rounded-lg border border-gold-500/15">
-            <table class="w-full min-w-[640px] text-left text-sm">
+          <div class="table-wrap max-h-64">
+            <table class="min-w-[640px]">
               <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
                 <tr>
                   <th class="px-4 py-3">ID</th>
@@ -175,12 +176,12 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         }
       </article>
 
-      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+      <article class="panel">
         <h2 class="mb-1 text-lg font-medium text-gold-300">Editar Aulas e Vídeo-aulas</h2>
         <p class="mb-4 text-xs text-slate-500">Crie, edite, envie vídeos ou exclua lições por curso.</p>
 
         <div class="mb-6 flex flex-wrap items-end gap-3">
-          <div class="min-w-[12rem] flex-1">
+          <div class="w-full min-w-0 flex-1 sm:min-w-[12rem]">
             <label class="mb-2 block text-xs text-slate-400">Curso</label>
             <select
               [(ngModel)]="lessonCourseId"
@@ -394,7 +395,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         </div>
       </article>
 
-      <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+      <article class="panel">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-lg font-medium text-gold-300">Cursos cadastrados</h2>
@@ -410,8 +411,8 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             Nenhum curso cadastrado.
           </p>
         } @else {
-          <div class="overflow-auto rounded-lg border border-gold-500/15">
-            <table class="w-full min-w-[520px] text-left text-sm">
+          <div class="table-wrap">
+            <table class="min-w-[520px]">
               <thead class="bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
                 <tr>
                   <th class="px-4 py-3">Curso</th>
@@ -451,12 +452,12 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
       </article>
 
       <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
+        <article class="panel">
           <h2 class="mb-4 text-lg font-medium text-gold-300">Inserir Novo Curso</h2>
           <form class="mb-6 space-y-2 rounded-lg border border-gold-500/20 p-3" (ngSubmit)="createNewCourse()">
             <input [(ngModel)]="newCourse.title" name="new-title" required placeholder="Título do curso" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm" />
             <textarea [(ngModel)]="newCourse.description" name="new-description" required placeholder="Descrição" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"></textarea>
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <input [(ngModel)]="newCourse.category" name="new-category" required placeholder="Categoria" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
               <input [(ngModel)]="newCourse.price" name="new-price" required type="number" min="0" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
               <input [(ngModel)]="newCourse.rating" name="new-rating" required type="number" min="0" max="5" step="0.1" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
@@ -475,7 +476,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
               >
                 <input [(ngModel)]="course.title" [name]="'title-' + course.id" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm" />
                 <textarea [(ngModel)]="course.description" [name]="'description-' + course.id" class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"></textarea>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <input [(ngModel)]="course.category" [name]="'category-' + course.id" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
                   <input [(ngModel)]="course.price" [name]="'price-' + course.id" type="number" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
                   <input [(ngModel)]="course.rating" [name]="'rating-' + course.id" type="number" step="0.1" class="rounded border border-gold-500/20 bg-obsidian-800 px-2 py-2 text-sm" />
@@ -491,7 +492,11 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                     class="w-full rounded border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-xs"
                   />
                   @if (course.hero_image_url) {
-                    <img [src]="course.hero_image_url" alt="Preview do curso" class="h-24 w-full rounded object-cover" />
+                    <app-adaptive-course-image
+                      [imageUrl]="course.hero_image_url"
+                      [alt]="'Preview: ' + course.title"
+                      variant="thumb"
+                    />
                   }
                   @if (imageUploading()[course.id]) {
                     <p class="text-xs text-gold-300">Enviando imagem...</p>
