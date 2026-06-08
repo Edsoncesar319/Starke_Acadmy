@@ -1,6 +1,5 @@
 import { NgClass } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { SideNavComponent } from './shared/side-nav.component';
@@ -12,7 +11,7 @@ import { SideNavLayoutService } from './services/side-nav-layout.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [NgClass, MatIconModule, RouterOutlet, SideNavComponent, TopAppBarComponent],
+  imports: [NgClass, RouterOutlet, SideNavComponent, TopAppBarComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })

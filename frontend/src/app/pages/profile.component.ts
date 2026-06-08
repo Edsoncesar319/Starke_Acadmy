@@ -41,7 +41,7 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
               accept="image/png,image/jpeg,image/webp"
               (change)="onAvatarSelected($event)"
               [disabled]="avatarUploading()"
-              class="w-full max-w-sm rounded-lg border border-gold-500/25 bg-obsidian-800 px-3 py-2 text-xs file:mr-3 file:rounded file:border-0 file:bg-gold-500/20 file:px-3 file:py-1 file:text-xs file:text-gold-300"
+              class="file-input max-w-full sm:max-w-sm"
             />
             @if (avatarUploading()) {
               <p class="text-xs text-gold-300">Enviando foto...</p>
@@ -55,15 +55,15 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
           name="name"
           required
           placeholder="Nome completo"
-          class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
+          class="form-input"
         />
         <input
           [(ngModel)]="form.email"
           name="email"
           type="email"
           required
+          class="form-input"
           placeholder="E-mail"
-          class="w-full rounded-lg border border-gold-500/25 bg-obsidian-800 px-4 py-2 text-sm outline-none focus:border-gold-500/50"
         />
 
         <div class="rounded-lg border border-gold-500/15 bg-obsidian-800/50 p-4">
@@ -73,14 +73,14 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
             name="password"
             type="password"
             placeholder="Nova senha"
-            class="mb-2 w-full rounded-lg border border-gold-500/25 bg-obsidian-900 px-4 py-2 text-sm outline-none"
+            class="form-input"
           />
         </div>
 
         <button
           type="submit"
           [disabled]="saving()"
-          class="rounded-lg border border-gold-500/40 bg-gold-500/15 px-4 py-2 text-sm font-semibold text-gold-300 hover:bg-gold-500/25 disabled:opacity-60"
+          class="btn-primary w-full sm:w-auto"
         >
           {{ saving() ? 'Salvando...' : 'Salvar perfil' }}
         </button>

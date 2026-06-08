@@ -30,13 +30,18 @@ export class SideNavLayoutService {
     this.isDesktop.set(desktop);
     if (desktop) {
       this.mobileOpen.set(false);
+      this.syncBodyScrollLock(false);
     }
   }
 
   toggle(): void {
     this.refreshViewport();
     if (!this.isDesktop()) {
-      this.mobileOpen.update((open) => !open);
+      this.mobileOpen.update((open) => {
+        const next = !open;
+        this.syncBodyScrollLock(next);
+        return next;
+      });
       return;
     }
     this.collapsed.update((value) => {
@@ -48,15 +53,22 @@ export class SideNavLayoutService {
 
   closeMobile(): void {
     this.mobileOpen.set(false);
+    this.syncBodyScrollLock(false);
   }
 
   expand(): void {
     if (!this.isDesktop()) {
       this.mobileOpen.set(true);
+      this.syncBodyScrollLock(true);
       return;
     }
     if (!this.collapsed()) return;
     this.collapsed.set(false);
     localStorage.setItem(STORAGE_KEY, '0');
+  }
+
+  syncBodyScrollLock(open: boolean): void {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('scroll-lock', open);
   }
 }

@@ -16,7 +16,7 @@ import { PortalDataService } from '../services/portal-data.service';
           </div>
           <a
             routerLink="/catalog"
-            class="rounded border border-gold-500/30 px-3 py-2 text-xs text-slate-200 hover:bg-gold-500/10"
+            class="btn-outline w-full sm:w-auto"
           >
             Voltar ao catálogo
           </a>
@@ -50,19 +50,19 @@ import { PortalDataService } from '../services/portal-data.service';
             <h2 class="text-sm font-medium text-gold-300">PIX copia e cola</h2>
             <textarea
               readonly
-              class="mt-3 h-40 w-full rounded border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-[11px] text-slate-200"
+              class="form-textarea mt-3 text-sm sm:text-base"
             >{{ pix.qr_code }}</textarea>
-            <div class="mt-3 flex gap-2">
+            <div class="mt-3 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
                 (click)="copyPix(pix.qr_code)"
-                class="flex-1 rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10"
+                class="btn-outline w-full flex-1"
               >
                 Copiar
               </button>
               @if (pix.ticket_url) {
                 <a
-                  class="flex-1 rounded border border-gold-500/40 px-3 py-2 text-center text-xs text-gold-300 hover:bg-gold-500/10"
+                  class="btn-outline w-full flex-1 text-center"
                   [href]="pix.ticket_url"
                   target="_blank"
                   rel="noopener"
@@ -75,18 +75,18 @@ import { PortalDataService } from '../services/portal-data.service';
         </div>
 
         @if (pix.purchase.status !== 'paid') {
-          <div class="flex flex-wrap gap-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               type="button"
               (click)="confirmPayment()"
               [disabled]="confirming()"
-              class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-60"
+              class="btn-success w-full sm:w-auto"
             >
               {{ confirming() ? 'Confirmando...' : 'Confirmar pagamento' }}
             </button>
             <a
               routerLink="/dashboard"
-              class="rounded-lg border border-gold-500/30 px-4 py-2 text-sm text-slate-200 hover:bg-gold-500/10"
+              class="btn-outline w-full text-center sm:w-auto"
             >
               Ver comprovante no painel
             </a>

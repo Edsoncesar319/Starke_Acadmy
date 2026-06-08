@@ -187,7 +187,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                       [lessonId]="lesson.id"
                       [lessonTitle]="lesson.title"
                     />
-                    <div class="sticky bottom-0 z-20 mt-2 flex flex-wrap gap-2 rounded-lg border border-gold-500/30 bg-obsidian-900/95 p-3 backdrop-blur">
+                    <div class="sticky-safe-bottom sticky bottom-0 z-20 mt-2 flex flex-wrap gap-2 rounded-lg border border-gold-500/30 bg-obsidian-900/95 p-3 backdrop-blur">
                       <button
                         type="button"
                         (click)="saveQuizForLesson(lesson.id, activeQuizEditor)"
@@ -219,7 +219,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 
       @if (showStudentPlayer()) {
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <aside class="panel lg:col-span-3 xl:col-span-3">
+        <aside class="panel order-2 max-h-[45vh] overflow-y-auto overscroll-contain lg:order-1 lg:col-span-3 lg:max-h-none xl:col-span-3">
           <h4 class="mb-3 text-gold-300">Reprodutor de Lições</h4>
 
           @if (auth.isStudent()) {
@@ -228,7 +228,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
               [ngModel]="selectedCourseId()"
               (ngModelChange)="onSelectedCourseIdChange($event, true)"
               name="studentCourse"
-              class="mb-4 w-full rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
+              class="form-input mb-4"
             >
               @for (item of data.activeCourses(); track item.courseId) {
                 <option [ngValue]="item.courseId">{{ item.course?.title }}</option>
@@ -243,7 +243,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             <button
               type="button"
               (click)="selectLesson(lesson.id)"
-              class="mb-2 block w-full rounded-lg border px-3 py-2 text-left text-sm transition"
+              class="mb-2 block min-h-[44px] w-full rounded-lg border px-3 py-2 text-left text-sm transition"
               [ngClass]="selectedLessonId() === lesson.id ? 'border-gold-500 bg-gold-500/10' : 'border-gold-500/20'"
             >
               <span class="block text-gold-300/90">{{ lesson.moduleName }}</span>
@@ -257,7 +257,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
           }
         </aside>
 
-        <div class="min-w-0 space-y-4 lg:col-span-9 xl:col-span-9">
+        <div class="order-1 min-w-0 space-y-4 lg:order-2 lg:col-span-9 xl:col-span-9">
           @if (currentLesson(); as lesson) {
             <div class="aspect-video overflow-hidden rounded-xl border border-gold-500/30 bg-black">
               @if (hasPlayableVideo(lesson.videoUrl)) {
@@ -290,7 +290,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                     [href]="lesson.pdfUrl"
                     target="_blank"
                     rel="noopener"
-                    class="mt-4 inline-block rounded-lg border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10"
+                    class="btn-outline mt-4 inline-flex"
                   >
                     Baixar conteúdo (PDF)
                   </a>
@@ -319,7 +319,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                       type="button"
                       (click)="markMaterialComplete()"
                       [disabled]="lessonProgressMap()[lesson.id]?.video_completed"
-                      class="mt-3 rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+                      class="btn-outline mt-3"
                     >
                       {{
                         lessonProgressMap()[lesson.id]?.video_completed
@@ -346,7 +346,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                       <p class="text-xs text-slate-200">{{ qIdx + 1 }}. {{ question.prompt }}</p>
                       <div class="mt-2 space-y-1">
                         @for (option of question.options; track option; let optIdx = $index) {
-                          <label class="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+                          <label class="flex min-h-[44px] cursor-pointer items-center gap-2 py-1 text-sm text-slate-300">
                             <input
                               type="radio"
                               [name]="'q-' + qIdx"
@@ -364,7 +364,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                   type="button"
                   (click)="submitQuiz()"
                   [disabled]="!selectedCourseId()"
-                  class="mt-3 w-full rounded border border-gold-500/40 px-3 py-2 text-xs text-gold-300 hover:bg-gold-500/10 disabled:opacity-60"
+                  class="btn-primary mt-3 w-full"
                 >
                   Finalizar avaliação
                 </button>

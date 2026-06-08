@@ -2,7 +2,7 @@
   @if (showShell) {
     <app-side-nav />
     <main
-      class="main-content min-h-[100dvh] w-full min-w-0 max-w-[100vw] transition-all duration-300 ease-in-out"
+      class="main-content min-h-[100dvh] w-full min-w-0 max-w-[100vw] transition-all duration-300 ease-in-out motion-reduce:transition-none"
       [ngClass]="layout.mainOffsetClass()"
     >
       <div class="page-shell">
@@ -13,17 +13,8 @@
           [avatarUrl]="student().avatarUrl"
           [navCollapsed]="layout.collapsed()"
           (toggleNav)="layout.toggle()"
+          (logout)="logout()"
         />
-        <div class="mb-4 flex justify-end sm:mb-5">
-          <button
-            type="button"
-            (click)="logout()"
-            class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10"
-          >
-            <mat-icon class="material-symbols-rounded !h-4 !w-4 !text-base">logout</mat-icon>
-            Sair
-          </button>
-        </div>
         <router-outlet />
       </div>
     </main>

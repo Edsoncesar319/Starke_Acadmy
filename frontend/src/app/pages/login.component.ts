@@ -10,15 +10,15 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   standalone: true,
   imports: [FormsModule, RouterLink, RouterLinkActive, StarkeLogoComponent],
   template: `
-    <section class="mx-auto mt-6 w-full max-w-md sm:mt-10">
-      <app-starke-logo variant="login" size="xl" [showTitle]="false" containerClass="mb-8" />
+    <section class="mx-auto mt-4 w-full max-w-md sm:mt-10">
+      <app-starke-logo variant="login" size="xl" [showTitle]="false" containerClass="mb-6 sm:mb-8" />
 
       <nav class="mb-6 flex rounded-xl border border-gold-500/25 bg-obsidian-800/80 p-1">
         <a
           routerLink="/login"
           routerLinkActive="bg-gold-500/15 text-gold-300"
           [routerLinkActiveOptions]="{ exact: true }"
-          class="flex-1 rounded-lg px-4 py-2 text-center text-sm font-medium text-slate-400 transition hover:text-gold-300"
+          class="nav-tab"
         >
           Entrar
         </a>
@@ -26,14 +26,14 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           routerLink="/matricula"
           routerLinkActive="bg-gold-500/15 text-gold-300"
           [routerLinkActiveOptions]="{ exact: true }"
-          class="flex-1 rounded-lg px-4 py-2 text-center text-sm font-medium text-slate-400 transition hover:text-gold-300"
+          class="nav-tab"
         >
           Matrícula
         </a>
       </nav>
 
       <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-5 shadow-gold sm:p-8">
-      <h1 class="text-2xl font-semibold text-gold-300">Acesso Starke Elite</h1>
+      <h1 class="text-xl font-semibold text-gold-300 sm:text-2xl">Acesso Starke Elite</h1>
       <p class="mt-2 text-sm text-slate-300">Entre para continuar sua jornada premium.</p>
 
       <form class="mt-6 space-y-4" (ngSubmit)="submit()">
@@ -42,21 +42,23 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           [(ngModel)]="email"
           name="email"
           required
-          class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
+          class="form-input"
           placeholder="E-mail"
+          autocomplete="email"
         />
         <input
           type="password"
           [(ngModel)]="password"
           name="password"
           required
-          class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
+          class="form-input"
           placeholder="Senha"
+          autocomplete="current-password"
         />
         <button
           type="submit"
           [disabled]="loading()"
-          class="w-full rounded-lg border border-gold-500/40 px-4 py-2 text-sm font-semibold text-gold-300 transition hover:bg-gold-500/10 disabled:opacity-60"
+          class="btn-primary w-full"
         >
           {{ loading() ? 'Entrando...' : 'Entrar no portal' }}
         </button>

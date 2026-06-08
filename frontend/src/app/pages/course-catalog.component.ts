@@ -40,13 +40,13 @@ import { PortalDataService } from '../services/portal-data.service';
             <div class="space-y-2 p-4">
               <p class="text-xs uppercase tracking-wider text-gold-300">{{ course.category }} - {{ course.rating }}</p>
               <h3 class="text-lg font-semibold">{{ course.title }}</h3>
-              <p class="text-sm text-slate-300">{{ course.description }}</p>
+              <p class="line-clamp-desc text-sm text-slate-300">{{ course.description }}</p>
               <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span class="text-base font-medium text-gold-300 sm:text-sm">{{ formatPrice(course.price) }}</span>
                 <button
                   type="button"
                   (click)="enroll(course.id)"
-                  class="w-full min-h-[44px] rounded-lg border border-gold-500/40 px-3 py-2 text-sm font-semibold text-gold-300 transition hover:bg-gold-500/20 sm:w-auto sm:text-xs"
+                  class="btn-outline w-full sm:w-auto"
                 >
                   Matricular-se
                 </button>

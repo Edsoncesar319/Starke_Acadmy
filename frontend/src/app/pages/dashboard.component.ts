@@ -35,7 +35,7 @@ import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/pay
             @for (item of activeCoursesView(); track item.id) {
               <article class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-4">
                 <div class="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+              <div class="min-w-0 flex-1">
                     <p class="text-sm font-medium text-slate-200">{{ item.course?.title }}</p>
                     <span
                       class="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
@@ -48,7 +48,7 @@ import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/pay
                     type="button"
                     (click)="removeEnrollment(item)"
                     [disabled]="removingEnrollmentId() === item.id"
-                    class="rounded border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                    class="btn-danger shrink-0 text-xs sm:text-sm"
                   >
                     {{ removingEnrollmentId() === item.id ? 'Removendo...' : 'Remover matrícula' }}
                   </button>
@@ -119,7 +119,7 @@ import { findPurchaseIdFromReceiptSubject, isReceiptMessage } from '../utils/pay
                         <button
                           type="button"
                           (click)="printReceiptFromMessage(message)"
-                          class="mt-3 rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                          class="btn-outline mt-3 text-xs"
                         >
                           Imprimir comprovante
                         </button>

@@ -1,5 +1,5 @@
 import { NgClass } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, computed, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
@@ -29,7 +29,8 @@ interface NavItem {
     }
 
     <aside
-      class="fixed left-0 top-0 z-50 flex h-[100dvh] max-h-screen flex-col border-r border-gold-500/20 bg-obsidian-gradient shadow-2xl transition-transform duration-300 ease-in-out lg:z-40 lg:shadow-none"
+      class="fixed left-0 top-0 z-50 flex h-[100dvh] max-h-screen flex-col border-r border-gold-500/20 bg-obsidian-gradient shadow-2xl transition-transform duration-300 ease-in-out motion-reduce:transition-none lg:z-40 lg:shadow-none"
+      style="padding-top: env(safe-area-inset-top)"
       [ngClass]="asideClass()"
       [attr.aria-expanded]="layout.isDesktop() ? !layout.collapsed() : layout.mobileOpen()"
       [attr.aria-hidden]="!layout.isDesktop() && !layout.mobileOpen()"
@@ -167,7 +168,23 @@ export class SideNavComponent implements OnInit, OnDestroy {
   @HostListener('window:resize')
   onResize(): void {
     this.layout.refreshViewport();
+    if (this.layout.isDesktop()) {
+      this.layout.syncBodyScrollLock(false);
+    }
   }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.layout.mobileOpen() && !this.layout.isDesktop()) {
+      this.layout.closeMobile();
+    }
+  }
+
+  private readonly scrollLockEffect = effect(() => {
+    if (this.layout.isDesktop()) {
+      this.layout.syncBodyScrollLock(false);
+    }
+  });
 
   ngOnInit(): void {
     this.layout.refreshViewport();
@@ -187,6 +204,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.routerSub?.unsubscribe();
+    this.layout.syncBodyScrollLock(false);
   }
 
   onNavigate(): void {

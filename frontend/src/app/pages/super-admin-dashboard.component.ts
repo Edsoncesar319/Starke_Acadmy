@@ -1,3 +1,4 @@
+import { NgClass } from '@angular/common';
 import { Component, OnDestroy, OnInit, QueryList, ViewChildren, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
@@ -10,7 +11,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
 @Component({
   selector: 'app-super-admin-dashboard',
   standalone: true,
-  imports: [FormsModule, StarkeLogoComponent, LessonQuizEditorComponent, AdaptiveCourseImageComponent],
+  imports: [NgClass, FormsModule, StarkeLogoComponent, LessonQuizEditorComponent, AdaptiveCourseImageComponent],
   template: `
     <section class="page-section">
       <header class="panel-header">
@@ -22,7 +23,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
         <p class="mt-2 text-xs text-slate-500">
           {{ admin.students().length }} aluno(s) · {{ admin.instructors().length }} instrutor(es) · atualização a cada 8s
         </p>
-        <button (click)="logout()" class="mt-4 rounded-lg border border-gold-500/40 px-3 py-2 text-xs font-semibold text-gold-300 hover:bg-gold-500/10">
+        <button (click)="logout()" class="btn-outline mt-4">
           Sair
         </button>
           </div>
@@ -52,7 +53,39 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             Nenhum aluno matriculado no banco de dados.
           </p>
         } @else {
-          <div class="table-wrap max-h-80">
+          <div class="space-y-3 md:hidden">
+            @for (student of admin.students(); track student.id) {
+              <div
+                class="mobile-card"
+                [ngClass]="{ 'ring-1 ring-gold-500/40': student.id === selectedUserId }"
+              >
+                <div class="flex items-center gap-3">
+                  <div
+                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/30 bg-gold-500/10 text-xs font-semibold text-gold-300"
+                  >
+                    @if (student.avatar_url) {
+                      <img [src]="student.avatar_url" alt="" class="h-full w-full object-cover" />
+                    } @else {
+                      {{ studentInitials(student.name) }}
+                    }
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-medium text-slate-100">{{ student.name }}</p>
+                    <p class="truncate text-xs text-slate-400">{{ student.email }}</p>
+                    <p class="text-xs text-gold-300/90">{{ student.student_level }}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  (click)="selectStudent(student.id)"
+                  class="btn-outline mt-3 w-full"
+                >
+                  {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                </button>
+              </div>
+            }
+          </div>
+          <div class="table-wrap max-h-80 hidden md:block">
             <table class="min-w-[640px]">
               <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
                 <tr>
@@ -87,7 +120,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                         <span class="font-medium text-slate-100">{{ student.name }}</span>
                       </div>
                     </td>
-                    <td class="px-4 py-3 text-slate-300">{{ student.email }}</td>
+                    <td class="max-w-[12rem] truncate px-4 py-3 text-slate-300">{{ student.email }}</td>
                     <td class="px-4 py-3 text-gold-300/90">{{ student.student_level }}</td>
                     <td class="px-4 py-3 text-right">
                       <button
@@ -122,7 +155,31 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
             Nenhum instrutor cadastrado. Marque um aluno como instrutor em «Editar perfil do aluno».
           </p>
         } @else {
-          <div class="table-wrap max-h-64">
+          <div class="space-y-3 md:hidden">
+            @for (instructor of admin.instructors(); track instructor.id) {
+              <div class="mobile-card">
+                <div class="flex items-center gap-3">
+                  <div
+                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold-500/30 bg-gold-500/10 text-xs font-semibold text-gold-300"
+                  >
+                    @if (instructor.avatar_url) {
+                      <img [src]="instructor.avatar_url" alt="" class="h-full w-full object-cover" />
+                    } @else {
+                      {{ studentInitials(instructor.name) }}
+                    }
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-medium text-slate-100">{{ instructor.name }}</p>
+                    <p class="truncate text-xs text-slate-400">{{ instructor.email }}</p>
+                  </div>
+                </div>
+                <button type="button" (click)="selectInstructor(instructor.id)" class="btn-outline mt-3 w-full">
+                  {{ instructor.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                </button>
+              </div>
+            }
+          </div>
+          <div class="table-wrap max-h-64 hidden md:block">
             <table class="min-w-[640px]">
               <thead class="sticky top-0 bg-obsidian-800 text-xs uppercase tracking-wide text-gold-300">
                 <tr>
@@ -187,7 +244,7 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
               [(ngModel)]="lessonCourseId"
               (ngModelChange)="onLessonCourseChange()"
               name="lessonCourseId"
-              class="w-full max-w-md rounded-lg border border-gold-500/20 bg-obsidian-900 px-3 py-2 text-sm"
+              class="form-input max-w-md"
             >
               @for (course of admin.courses(); track course.id) {
                 <option [ngValue]="course.id">{{ course.title }}</option>

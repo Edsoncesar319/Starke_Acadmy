@@ -29,10 +29,10 @@ import { Component } from '@angular/core';
         }
       </div>
 
-      <div class="flex flex-wrap gap-3">
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Chat ao vivo</button>
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Suporte por e-mail</button>
-        <button class="rounded-lg border border-gold-500/40 px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10">Comunidade</button>
+      <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <button class="btn-outline w-full sm:w-auto">Chat ao vivo</button>
+        <button class="btn-outline w-full sm:w-auto">Suporte por e-mail</button>
+        <button class="btn-outline w-full sm:w-auto">Comunidade</button>
       </div>
     </section>
   `,

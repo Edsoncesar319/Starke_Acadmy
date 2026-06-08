@@ -9,11 +9,11 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   standalone: true,
   imports: [FormsModule, StarkeLogoComponent],
   template: `
-    <section class="mx-auto mt-6 w-full max-w-md sm:mt-10">
-      <app-starke-logo variant="login" size="xl" title="Starke Academy — Admin" [showTitle]="false" containerClass="mb-8" />
+    <section class="mx-auto mt-4 w-full max-w-md sm:mt-10">
+      <app-starke-logo variant="login" size="xl" title="Starke Academy — Admin" [showTitle]="false" containerClass="mb-6 sm:mb-8" />
 
       <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-5 shadow-gold sm:p-8">
-      <h1 class="text-2xl font-semibold text-gold-300">Acesso de administrador</h1>
+      <h1 class="text-xl font-semibold text-gold-300 sm:text-2xl">Acesso de administrador</h1>
       <p class="mt-2 text-sm text-slate-300">Gerencie cursos e envie detalhes para alunos.</p>
 
       <form class="mt-6 space-y-4" (ngSubmit)="submit()">
@@ -23,7 +23,8 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           type="email"
           required
           placeholder="E-mail"
-          class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
+          class="form-input"
+          autocomplete="email"
         />
         <input
           [(ngModel)]="password"
@@ -31,9 +32,10 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           type="password"
           required
           placeholder="Senha"
-          class="w-full rounded-lg border border-gold-500/30 bg-obsidian-800 px-4 py-2 outline-none"
+          class="form-input"
+          autocomplete="current-password"
         />
-        <button type="submit" [disabled]="loading()" class="w-full rounded-lg border border-gold-500/40 px-4 py-2 text-sm font-semibold text-gold-300 hover:bg-gold-500/10 disabled:opacity-60">
+        <button type="submit" [disabled]="loading()" class="btn-primary w-full">
           {{ loading() ? 'Autenticando...' : 'Entrar como Admin' }}
         </button>
       </form>
