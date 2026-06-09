@@ -1,15 +1,18 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { StarkeLogoComponent } from '../shared/starke-logo.component';
 
 @Component({
   selector: 'app-admin-login',
   standalone: true,
-  imports: [FormsModule, StarkeLogoComponent],
+  imports: [FormsModule, RouterLink, StarkeLogoComponent],
   template: `
     <section class="mx-auto mt-4 w-full max-w-md sm:mt-10">
+      <p class="mb-4 text-center">
+        <a routerLink="/" class="text-xs text-slate-500 transition hover:text-gold-300">← Voltar ao início</a>
+      </p>
       <app-starke-logo variant="login" size="xl" title="Starke Academy — Admin" [showTitle]="false" containerClass="mb-6 sm:mb-8" />
 
       <div class="rounded-2xl border border-gold-500/30 bg-obsidian-700/70 p-5 shadow-gold sm:p-8">

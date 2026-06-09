@@ -54,15 +54,17 @@ export class AppComponent {
   logout(): void {
     this.auth.logout();
     this.data.clear();
-    void this.router.navigateByUrl('/login');
+    void this.router.navigateByUrl('/');
   }
 
   private shouldShowShell(url: string): boolean {
+    const path = url.split('?')[0];
     return (
-      url !== '/login' &&
-      url !== '/matricula' &&
-      url !== '/admin/login' &&
-      !url.startsWith('/admin/')
+      path !== '/' &&
+      path !== '/login' &&
+      path !== '/matricula' &&
+      path !== '/admin/login' &&
+      !path.startsWith('/admin/')
     );
   }
 

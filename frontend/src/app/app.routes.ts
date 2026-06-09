@@ -4,6 +4,7 @@ import { CourseCatalogComponent } from './pages/course-catalog.component';
 import { DashboardComponent } from './pages/dashboard.component';
 import { AdminLoginComponent } from './pages/admin-login.component';
 import { LessonPlayerComponent } from './pages/lesson-player.component';
+import { LandingComponent } from './pages/landing.component';
 import { LoginComponent } from './pages/login.component';
 import { MatriculaComponent } from './pages/matricula.component';
 import { MyPaymentsComponent } from './pages/my-payments.component';
@@ -35,7 +36,7 @@ const studentGuard: CanActivateFn = () => {
 };
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'login' },
+  { path: '', component: LandingComponent },
   { path: 'login', component: LoginComponent },
   { path: 'matricula', component: MatriculaComponent },
   { path: 'admin/login', component: AdminLoginComponent },

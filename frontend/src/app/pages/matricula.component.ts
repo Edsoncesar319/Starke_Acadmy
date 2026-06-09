@@ -12,6 +12,9 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
   imports: [FormsModule, RouterLink, RouterLinkActive, StarkeLogoComponent],
   template: `
     <section class="mx-auto mt-4 w-full max-w-lg sm:mt-10">
+      <p class="mb-4 text-center">
+        <a routerLink="/" class="text-xs text-slate-500 transition hover:text-gold-300">← Voltar ao início</a>
+      </p>
       <app-starke-logo variant="login" size="xl" [showTitle]="false" containerClass="mb-6 sm:mb-8" />
 
       <nav class="mb-6 flex rounded-xl border border-gold-500/25 bg-obsidian-800/80 p-1">

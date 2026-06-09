@@ -1,5 +1,5 @@
-<div class="min-h-[100dvh] overflow-x-hidden bg-obsidian-gradient">
-  @if (showShell) {
+@if (showShell) {
+  <div class="min-h-[100dvh] overflow-x-hidden bg-obsidian-gradient">
     <app-side-nav />
     <main
       class="main-content min-h-[100dvh] w-full min-w-0 max-w-[100vw] transition-all duration-300 ease-in-out motion-reduce:transition-none"
@@ -18,9 +18,11 @@
         <router-outlet />
       </div>
     </main>
-  } @else {
-    <main class="page-auth min-h-[100dvh]">
+  </div>
+} @else {
+  <div class="starke-bg min-h-[100dvh]">
+    <main class="page-auth relative z-10 min-h-[100dvh]">
       <router-outlet />
     </main>
-  }
-</div>
+  </div>
+}
