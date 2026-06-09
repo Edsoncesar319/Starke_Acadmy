@@ -155,15 +155,38 @@ export class PortalDataService {
     return this.messages().filter((message) => !message.isFromStudent && message.id > lastSeenId).length;
   });
 
+  /** Cursos pagos sem matrícula e sem compra paga (ainda não geraram cobrança PIX). */
+  readonly coursesAwaitingPayment = computed(() => {
+    const enrolledIds = new Set(this.enrollments().map((item) => item.courseId));
+    const coveredCourseIds = new Set(
+      this.purchases()
+        .filter((item) => item.status === 'paid' || this.isPurchaseAwaitingPayment(item))
+        .map((item) => item.course_id),
+    );
+
+    return this.courses().filter(
+      (course) => (course.price || 0) > 0 && !enrolledIds.has(course.id) && !coveredCourseIds.has(course.id),
+    );
+  });
+
+  isPurchaseAwaitingPayment(purchase: Purchase): boolean {
+    return ['pending', 'in_process', 'in_mediation'].includes(purchase.status);
+  }
+
+  canConfirmPaymentManually(purchase: Purchase): boolean {
+    return this.isPurchaseAwaitingPayment(purchase) && ['pix', 'mock'].includes(purchase.provider);
+  }
+
   async refreshPortalData(): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const [me, courses, enrollments, messages] = await Promise.all([
+      const [me, courses, enrollments, messages, purchases] = await Promise.all([
         firstValueFrom(this.http.get<any>(`${this.apiUrl}/me`)),
         firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/courses`)),
         firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/enrollments`)),
         firstValueFrom(this.http.get<any[]>(`${this.apiUrl}/messages`)),
+        firstValueFrom(this.http.get<Purchase[]>(`${this.apiUrl}/purchases`)),
       ]);
 
       this.student.set({
@@ -194,6 +217,7 @@ export class PortalDataService {
         })),
       );
       this.messages.set(messages.map((item) => this.mapStudentMessage(item)));
+      this.purchases.set(purchases);
     } catch {
       this.error.set('Não foi possível carregar os dados. Verifique se o backend está em execução na porta 8000.');
     } finally {
@@ -302,7 +326,7 @@ export class PortalDataService {
     }
   }
 
-  async startPixCheckout(courseId: number): Promise<void> {
+  async startPixCheckout(courseId: number): Promise<boolean> {
     this.error.set(null);
     this.pixStatus.set('Gerando PIX...');
     try {
@@ -311,6 +335,8 @@ export class PortalDataService {
       );
       this.pixCheckout.set(checkout);
       this.pixStatus.set('Aguardando pagamento...');
+      await this.refreshPurchases();
+      return true;
     } catch (err: unknown) {
       const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
       const message =
@@ -322,6 +348,7 @@ export class PortalDataService {
       this.error.set(message || 'Não foi possível gerar o PIX. Tente novamente.');
       this.pixCheckout.set(null);
       this.pixStatus.set(null);
+      return false;
     }
   }
 

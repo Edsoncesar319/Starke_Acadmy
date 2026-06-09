@@ -37,6 +37,22 @@ def mercadopago_enabled() -> bool:
     return bool(os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN"))
 
 
+def payment_status() -> dict[str, Any]:
+    provider = "none"
+    try:
+        provider = resolve_pix_provider()
+    except HTTPException as exc:
+        provider = f"error:{exc.detail}"
+
+    return {
+        "provider": provider,
+        "mercadopago_configured": mercadopago_enabled(),
+        "pix_receiver_configured": bool(_pix_receiver_key()),
+        "mock_enabled": _pix_mock_enabled(),
+        "webhook_url": webhook_url(),
+    }
+
+
 def _pix_mock_enabled() -> bool:
     if _pix_receiver_key():
         return False

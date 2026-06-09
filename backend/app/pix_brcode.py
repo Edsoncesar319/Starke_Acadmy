@@ -74,12 +74,24 @@ def build_pix_copia_cola(
 
 
 def pix_qr_code_base64(copia_cola: str) -> str:
-    import qrcode
+    try:
+        import qrcode
 
-    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
-    qr.add_data(copia_cola)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white")
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=8,
+            border=2,
+        )
+        qr.add_data(copia_cola)
+        qr.make(fit=True)
+        image = qr.make_image(fill_color="black", back_color="white")
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode("ascii")
+    except Exception:
+        import segno
+
+        buffer = io.BytesIO()
+        segno.make(copia_cola, error="m").save(buffer, kind="png", scale=6, border=2)
+        return base64.b64encode(buffer.getvalue()).decode("ascii")

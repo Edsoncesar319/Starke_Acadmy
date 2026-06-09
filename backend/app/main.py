@@ -47,7 +47,12 @@ from .models import (
     User,
 )
 from .payments import finalize_purchase_as_paid
-from .pix_checkout import confirm_payment_manually, create_pix_checkout, process_payment_webhook
+from .pix_checkout import (
+    confirm_payment_manually,
+    create_pix_checkout,
+    payment_status,
+    process_payment_webhook,
+)
 from .schemas import (
     CourseCreate,
     CourseOut,
@@ -183,7 +188,13 @@ def health():
         "status": "ok",
         "blob_storage": blob_storage_enabled(),
         "database": "postgres" if not DATABASE_URL.startswith("sqlite") else "sqlite",
+        "payments": payment_status(),
     }
+
+
+@app.get("/payments/status")
+def payments_status():
+    return payment_status()
 
 
 @app.get("/media/{asset_path:path}", include_in_schema=False)
