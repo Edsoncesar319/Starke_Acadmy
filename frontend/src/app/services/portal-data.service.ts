@@ -253,7 +253,18 @@ export class PortalDataService {
     await this.refreshEnrollments();
   }
 
-  async enrollInCourse(courseId: number): Promise<void> {
+  async enrollInCourse(courseId: number): Promise<'enrolled' | 'payment' | 'already' | 'error'> {
+    this.error.set(null);
+    this.status.set(null);
+
+    const course = this.courses().find((item) => item.id === courseId);
+    const courseTitle = course?.title ?? 'curso';
+
+    if (this.enrollments().some((item) => item.courseId === courseId)) {
+      this.status.set(`Você já está matriculado em "${courseTitle}".`);
+      return 'already';
+    }
+
     try {
       await firstValueFrom(
         this.http.post(
@@ -262,14 +273,19 @@ export class PortalDataService {
         ),
       );
       await this.refreshPortalData();
+      this.status.set(
+        `Matrícula confirmada em "${courseTitle}"! Você já pode acessar o curso no painel e nas aulas.`,
+      );
+      return 'enrolled';
     } catch (err) {
-      // Se o backend exigir pagamento (402), abrimos checkout PIX.
-      const status = (err as any)?.status;
+      const status = (err as { status?: number })?.status;
       if (status === 402) {
         await this.startPixCheckout(courseId);
-        return;
+        this.status.set(`Para concluir a matrícula em "${courseTitle}", finalize o pagamento PIX.`);
+        return 'payment';
       }
       this.error.set('Não foi possível concluir a matrícula no curso.');
+      return 'error';
     }
   }
 

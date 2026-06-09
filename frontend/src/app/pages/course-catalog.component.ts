@@ -10,6 +10,17 @@ import { PortalDataService } from '../services/portal-data.service';
   imports: [FormsModule, AdaptiveCourseImageComponent],
   template: `
     <section class="page-section">
+      @if (data.status()) {
+        <p class="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300">
+          {{ data.status() }}
+        </p>
+      }
+      @if (data.error()) {
+        <p class="rounded-lg border border-red-400/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+          {{ data.error() }}
+        </p>
+      }
+
       <div class="panel flex flex-col gap-3 lg:flex-row">
         <input
           [ngModel]="query()"
@@ -46,9 +57,16 @@ import { PortalDataService } from '../services/portal-data.service';
                 <button
                   type="button"
                   (click)="enroll(course.id)"
-                  class="btn-outline w-full sm:w-auto"
+                  [disabled]="enrollingId() === course.id || isEnrolled(course.id)"
+                  class="btn-outline w-full sm:w-auto disabled:opacity-60"
                 >
-                  Matricular-se
+                  {{
+                    isEnrolled(course.id)
+                      ? 'Já matriculado'
+                      : enrollingId() === course.id
+                        ? 'Matriculando...'
+                        : 'Matricular-se'
+                  }}
                 </button>
               </div>
             </div>
@@ -64,6 +82,7 @@ export class CourseCatalogComponent {
   private readonly router = inject(Router);
   readonly query = signal('');
   readonly category = signal('Todas');
+  readonly enrollingId = signal<number | null>(null);
 
   readonly categories = computed(() => {
     const values = new Set(this.data.courses().map((course) => course.category).filter(Boolean));
@@ -82,9 +101,22 @@ export class CourseCatalogComponent {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price || 0);
   }
 
+  isEnrolled(courseId: number): boolean {
+    return this.data.enrollments().some((item) => item.courseId === courseId);
+  }
+
   async enroll(courseId: number): Promise<void> {
-    await this.data.enrollInCourse(courseId);
-    if (this.data.pixCheckout()) {
+    if (this.isEnrolled(courseId)) {
+      const course = this.data.courses().find((item) => item.id === courseId);
+      this.data.status.set(`Você já está matriculado em "${course?.title ?? 'este curso'}".`);
+      return;
+    }
+
+    this.enrollingId.set(courseId);
+    const result = await this.data.enrollInCourse(courseId);
+    this.enrollingId.set(null);
+
+    if (result === 'payment' && this.data.pixCheckout()) {
       await this.router.navigateByUrl(`/pagamento/${courseId}`);
     }
   }
