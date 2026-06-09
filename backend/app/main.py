@@ -46,6 +46,7 @@ from .models import (
     Ticket,
     User,
 )
+from .course_access import assert_student_course_access, has_course_access
 from .payments import finalize_purchase_as_paid
 from .pix_checkout import (
     confirm_payment_manually,
@@ -578,7 +579,12 @@ def admin_mark_purchase_paid(
     return purchase
 
 @app.get("/courses/{course_id}/lessons")
-def list_course_lessons(course_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_course_lessons(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    assert_student_course_access(db, current_user, course_id)
     lessons = db.query(Lesson).filter(Lesson.course_id == course_id).all()
     return [
         {
@@ -603,26 +609,20 @@ def get_course_lesson_progress(
     if current_user.is_admin:
         raise HTTPException(status_code=403, detail="Administradores não registram progresso de aluno.")
 
-    enrolled = (
-        db.query(Enrollment)
-        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == course_id)
-        .first()
-    )
-    if not enrolled:
-        raise HTTPException(status_code=403, detail="Matricule-se no curso para ver o progresso.")
-
+    assert_student_course_access(db, current_user, course_id)
     return course_lesson_progress_list(db, current_user.id, course_id)
 
 
 @app.get("/lessons/{lesson_id}/quiz", response_model=LessonQuizStudentOut)
 def get_lesson_quiz(
     lesson_id: int,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Aula não encontrada.")
+    assert_student_course_access(db, current_user, lesson.course_id)
     rows = get_lesson_quiz_rows(db, lesson_id)
     return {
         "lesson_id": lesson_id,
@@ -644,13 +644,7 @@ def submit_lesson_quiz(
     if not lesson:
         raise HTTPException(status_code=404, detail="Aula não encontrada.")
 
-    enrolled = (
-        db.query(Enrollment)
-        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == lesson.course_id)
-        .first()
-    )
-    if not enrolled:
-        raise HTTPException(status_code=403, detail="Matricule-se no curso para realizar a avaliação.")
+    assert_student_course_access(db, current_user, lesson.course_id)
 
     rows = get_lesson_quiz_rows(db, lesson_id)
     try:
@@ -695,6 +689,8 @@ def get_lesson_progress(
     if not lesson:
         raise HTTPException(status_code=404, detail="Aula não encontrada.")
 
+    assert_student_course_access(db, current_user, lesson.course_id)
+
     progress = (
         db.query(LessonProgress)
         .filter(LessonProgress.user_id == current_user.id, LessonProgress.lesson_id == lesson_id)
@@ -721,13 +717,7 @@ def complete_lesson_video(
     if not lesson:
         raise HTTPException(status_code=404, detail="Aula não encontrada.")
 
-    enrolled = (
-        db.query(Enrollment)
-        .filter(Enrollment.user_id == current_user.id, Enrollment.course_id == lesson.course_id)
-        .first()
-    )
-    if not enrolled:
-        raise HTTPException(status_code=403, detail="Matricule-se no curso para registrar progresso.")
+    assert_student_course_access(db, current_user, lesson.course_id)
 
     try:
         progress, chapter_progress, course_contribution, course_progress = mark_video_completed(
@@ -748,7 +738,8 @@ def complete_lesson_video(
 
 @app.get("/enrollments", response_model=list[EnrollmentOut])
 def list_enrollments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    rows = db.query(Enrollment).filter(Enrollment.user_id == current_user.id).all()
+    return [row for row in rows if has_course_access(db, current_user, row.course_id)]
 
 
 @app.post("/enrollments", response_model=EnrollmentOut, status_code=status.HTTP_201_CREATED)
@@ -767,6 +758,7 @@ def enroll(
         .first()
     )
     if existing:
+        assert_student_course_access(db, current_user, payload.course_id)
         return existing
 
     # Curso pago: exige compra aprovada

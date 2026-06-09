@@ -57,16 +57,10 @@ import { PortalDataService } from '../services/portal-data.service';
                 <button
                   type="button"
                   (click)="enroll(course.id)"
-                  [disabled]="enrollingId() === course.id || isEnrolled(course.id)"
+                  [disabled]="enrollingId() === course.id || data.hasCourseAccess(course.id)"
                   class="btn-outline w-full sm:w-auto disabled:opacity-60"
                 >
-                  {{
-                    isEnrolled(course.id)
-                      ? 'Já matriculado'
-                      : enrollingId() === course.id
-                        ? 'Matriculando...'
-                        : 'Matricular-se'
-                  }}
+                  {{ actionLabel(course) }}
                 </button>
               </div>
             </div>
@@ -101,12 +95,15 @@ export class CourseCatalogComponent {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price || 0);
   }
 
-  isEnrolled(courseId: number): boolean {
-    return this.data.enrollments().some((item) => item.courseId === courseId);
+  actionLabel(course: { id: number; price: number }): string {
+    if (this.data.hasCourseAccess(course.id)) return 'Já matriculado';
+    if (this.enrollingId() === course.id) return 'Processando...';
+    if ((course.price || 0) > 0) return 'Pagar com PIX';
+    return 'Matricular-se';
   }
 
   async enroll(courseId: number): Promise<void> {
-    if (this.isEnrolled(courseId)) {
+    if (this.data.hasCourseAccess(courseId)) {
       const course = this.data.courses().find((item) => item.id === courseId);
       this.data.status.set(`Você já está matriculado em "${course?.title ?? 'este curso'}".`);
       return;

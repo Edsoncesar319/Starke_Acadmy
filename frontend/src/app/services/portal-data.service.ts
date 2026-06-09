@@ -139,13 +139,15 @@ export class PortalDataService {
   readonly progressTick = signal(0);
 
   readonly activeCourses = computed(() =>
-    this.enrollments().map((enrollment) => {
-      const course = this.courses().find((item) => item.id === enrollment.courseId);
-      return {
-        ...enrollment,
-        course,
-      };
-    }),
+    this.enrollments()
+      .filter((enrollment) => this.hasCourseAccess(enrollment.courseId))
+      .map((enrollment) => {
+        const course = this.courses().find((item) => item.id === enrollment.courseId);
+        return {
+          ...enrollment,
+          course,
+        };
+      }),
   );
 
   readonly unreadMessagesCount = computed(() => {
@@ -155,9 +157,8 @@ export class PortalDataService {
     return this.messages().filter((message) => !message.isFromStudent && message.id > lastSeenId).length;
   });
 
-  /** Cursos pagos sem matrícula e sem compra paga (ainda não geraram cobrança PIX). */
+  /** Cursos pagos sem acesso liberado e sem cobrança PIX em andamento. */
   readonly coursesAwaitingPayment = computed(() => {
-    const enrolledIds = new Set(this.enrollments().map((item) => item.courseId));
     const coveredCourseIds = new Set(
       this.purchases()
         .filter((item) => item.status === 'paid' || this.isPurchaseAwaitingPayment(item))
@@ -165,7 +166,8 @@ export class PortalDataService {
     );
 
     return this.courses().filter(
-      (course) => (course.price || 0) > 0 && !enrolledIds.has(course.id) && !coveredCourseIds.has(course.id),
+      (course) =>
+        (course.price || 0) > 0 && !this.hasCourseAccess(course.id) && !coveredCourseIds.has(course.id),
     );
   });
 
@@ -175,6 +177,21 @@ export class PortalDataService {
 
   canConfirmPaymentManually(purchase: Purchase): boolean {
     return this.isPurchaseAwaitingPayment(purchase) && ['pix', 'mock'].includes(purchase.provider);
+  }
+
+  hasPaidPurchase(courseId: number): boolean {
+    return this.purchases().some((item) => item.course_id === courseId && item.status === 'paid');
+  }
+
+  /** Matrícula válida: gratuito com enroll ou pago com pagamento confirmado. */
+  hasCourseAccess(courseId: number): boolean {
+    const enrolled = this.enrollments().some((item) => item.courseId === courseId);
+    if (!enrolled) return false;
+
+    const course = this.courses().find((item) => item.id === courseId);
+    if (!course || (course.price || 0) <= 0) return true;
+
+    return this.hasPaidPurchase(courseId);
   }
 
   async refreshPortalData(): Promise<void> {
@@ -284,9 +301,18 @@ export class PortalDataService {
     const course = this.courses().find((item) => item.id === courseId);
     const courseTitle = course?.title ?? 'curso';
 
-    if (this.enrollments().some((item) => item.courseId === courseId)) {
+    if (this.hasCourseAccess(courseId)) {
       this.status.set(`Você já está matriculado em "${courseTitle}".`);
       return 'already';
+    }
+
+    if (course && (course.price || 0) > 0 && !this.hasPaidPurchase(courseId)) {
+      const started = await this.startPixCheckout(courseId);
+      if (!started) return 'error';
+      this.status.set(
+        `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após a confirmação.`,
+      );
+      return 'payment';
     }
 
     try {
@@ -305,7 +331,9 @@ export class PortalDataService {
       const status = (err as { status?: number })?.status;
       if (status === 402) {
         await this.startPixCheckout(courseId);
-        this.status.set(`Para concluir a matrícula em "${courseTitle}", finalize o pagamento PIX.`);
+        this.status.set(
+          `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após a confirmação.`,
+        );
         return 'payment';
       }
       this.error.set('Não foi possível concluir a matrícula no curso.');
@@ -716,8 +744,16 @@ export class PortalDataService {
           pdfUrl: lesson.pdf_url ?? null,
         })),
       );
-    } catch {
-      this.error.set('Não foi possível carregar as aulas.');
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 402) {
+        this.error.set('Pagamento pendente. Conclua o PIX para liberar as aulas deste curso.');
+      } else if (status === 403) {
+        this.error.set('Matricule-se no curso para acessar as aulas.');
+      } else {
+        this.error.set('Não foi possível carregar as aulas.');
+      }
+      this.lessons.set([]);
     }
   }
 
