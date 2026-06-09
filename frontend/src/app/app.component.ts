@@ -22,11 +22,12 @@ export class AppComponent {
   readonly layout = inject(SideNavLayoutService);
   readonly student = this.data.student;
   showShell = true;
+  isLandingPage = false;
 
   constructor() {
-    this.showShell = this.shouldShowShell(this.router.url);
+    this.syncRouteLayout(this.router.url);
     this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => {
-      this.showShell = this.shouldShowShell(this.router.url);
+      this.syncRouteLayout(this.router.url);
       void this.refreshProgressOnNavigate();
     });
 
@@ -66,6 +67,12 @@ export class AppComponent {
       path !== '/admin/login' &&
       !path.startsWith('/admin/')
     );
+  }
+
+  private syncRouteLayout(url: string): void {
+    const path = url.split('?')[0];
+    this.showShell = this.shouldShowShell(url);
+    this.isLandingPage = path === '/';
   }
 
   private async refreshProgressOnNavigate(): Promise<void> {

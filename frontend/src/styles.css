@@ -114,6 +114,41 @@ h3 {
   pointer-events: none;
 }
 
+.landing-page {
+  @apply relative min-h-[100dvh] overflow-x-hidden bg-obsidian-900;
+}
+
+.landing-page__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('assets/landing-hero.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
+  pointer-events: none;
+}
+
+.landing-page__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(14, 14, 15, 0.1) 0%,
+    rgba(14, 14, 15, 0.35) 32%,
+    rgba(14, 14, 15, 0.82) 68%,
+    #0e0e0f 100%
+  );
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .landing-page__bg {
+    background-position: 38% top;
+  }
+}
+
 @layer components {
   .page-shell {
     @apply w-full min-w-0 max-w-[100vw] px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5;
