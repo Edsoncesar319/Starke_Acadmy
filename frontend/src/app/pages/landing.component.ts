@@ -8,18 +8,25 @@ import { AuthService } from '../services/auth.service';
   imports: [RouterLink],
   template: `
     <div class="landing-page">
-      <div class="landing-page__bg" aria-hidden="true"></div>
+      <img
+        src="assets/landing-hero.png"
+        alt=""
+        class="landing-page__bg"
+        aria-hidden="true"
+        decoding="async"
+        fetchpriority="high"
+      />
       <div class="landing-page__overlay" aria-hidden="true"></div>
 
-      <header class="relative z-10 flex items-center justify-end px-4 py-4 sm:px-6 md:px-8">
+      <header class="relative z-20 flex items-center justify-end px-4 py-4 sm:px-6 md:px-8">
         <a routerLink="/admin/login" class="text-xs text-slate-300/80 transition hover:text-gold-300">
           Admin
         </a>
       </header>
 
-      <main class="relative z-10 mx-auto flex w-full max-w-5xl flex-col px-4 pb-12 sm:px-6 sm:pb-16 md:px-8">
+      <main class="relative z-20 mx-auto flex w-full max-w-5xl flex-col px-4 pb-12 sm:px-6 sm:pb-16 md:px-8">
         <section
-          class="flex min-h-[min(58vh,520px)] w-full flex-col items-center justify-end pb-2 pt-8 text-center sm:min-h-[min(62vh,640px)] sm:pb-6"
+          class="flex min-h-[min(68vh,680px)] w-full flex-col items-center justify-end pb-2 pt-8 text-center sm:min-h-[min(72vh,760px)] sm:pb-8"
         >
           <div class="mt-auto flex w-full max-w-md flex-col gap-3 sm:max-w-lg sm:flex-row sm:justify-center">
             <a routerLink="/login" class="btn-primary w-full sm:flex-1">
@@ -80,7 +87,7 @@ import { AuthService } from '../services/auth.service';
         </section>
       </main>
 
-      <footer class="relative z-10 border-t border-gold-500/10 px-4 py-6 text-center text-xs text-slate-500">
+      <footer class="relative z-20 border-t border-gold-500/10 px-4 py-6 text-center text-xs text-slate-500">
         © {{ year }} Starke Academy · Todos os direitos reservados
       </footer>
     </div>
