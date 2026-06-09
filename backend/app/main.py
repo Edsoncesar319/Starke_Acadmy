@@ -11,8 +11,6 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from uuid import uuid4
-
 from .auth import (
     build_access_token_claims,
     create_access_token,
@@ -49,7 +47,7 @@ from .models import (
     User,
 )
 from .payments import finalize_purchase_as_paid
-from .pix_brcode import build_pix_copia_cola, pix_qr_code_base64
+from .pix_checkout import confirm_payment_manually, create_pix_checkout, process_payment_webhook
 from .schemas import (
     CourseCreate,
     CourseOut,
@@ -431,103 +429,8 @@ def _to_cents(amount: float) -> int:
     return max(0, int(round((amount or 0) * 100)))
 
 
-def _pix_receiver_key() -> str | None:
-    key = os.getenv("PIX_RECEIVER_KEY", "").strip()
-    return key or None
-
-
-def _pix_merchant_name() -> str:
-    return os.getenv("PIX_MERCHANT_NAME", "Starke Academy").strip() or "Starke Academy"
-
-
-def _pix_merchant_city() -> str:
-    return os.getenv("PIX_MERCHANT_CITY", "Sao Paulo").strip() or "Sao Paulo"
-
-
-def _mercadopago_enabled() -> bool:
-    return bool(os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN"))
-
-
-def _pix_mock_enabled() -> bool:
-    if _pix_receiver_key():
-        return False
-    flag = os.getenv("PIX_CHECKOUT_MOCK", "").strip().lower()
-    if flag in ("1", "true", "yes"):
-        return True
-    if flag in ("0", "false", "no"):
-        return False
-    if on_vercel():
-        return False
-    return not _mercadopago_enabled()
-
-
-def _static_pix_checkout_response(purchase: Purchase, course: Course) -> dict:
-    pix_key = _pix_receiver_key()
-    if not pix_key:
-        raise HTTPException(status_code=503, detail="Chave PIX não configurada (PIX_RECEIVER_KEY).")
-
-    txid = f"COMPRA{purchase.id}"
-    copia_cola = build_pix_copia_cola(
-        pix_key=pix_key,
-        amount_brl=purchase.amount_cents / 100.0,
-        merchant_name=_pix_merchant_name(),
-        merchant_city=_pix_merchant_city(),
-        txid=txid,
-    )
-    try:
-        qr_base64 = pix_qr_code_base64(copia_cola)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Não foi possível gerar o QR Code PIX: {exc}",
-        ) from exc
-
-    purchase.provider = "pix"
-    purchase.provider_reference = txid
-    return {
-        "purchase": purchase,
-        "provider": "pix",
-        "provider_reference": txid,
-        "qr_code_base64": qr_base64,
-        "qr_code": copia_cola,
-        "ticket_url": None,
-    }
-
-
-# 1x1 PNG placeholder for local/dev PIX UI.
-_MOCK_PIX_QR_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-)
-
-
-def _mock_pix_checkout_response(purchase: Purchase) -> dict:
-    ref = f"mock-{purchase.id}"
-    purchase.provider = "mock"
-    purchase.provider_reference = ref
-    return {
-        "purchase": purchase,
-        "provider": "mock",
-        "provider_reference": ref,
-        "qr_code_base64": _MOCK_PIX_QR_BASE64,
-        "qr_code": f"PIX-DEV-MOCK-{purchase.id}",
-        "ticket_url": None,
-    }
-
-
-def _mp_sdk():
-    token = os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MP_ACCESS_TOKEN")
-    if not token:
-        raise HTTPException(
-            status_code=503,
-            detail="Mercado Pago não configurado. Defina MERCADOPAGO_ACCESS_TOKEN ou use PIX_CHECKOUT_MOCK=true em dev.",
-        )
-    import mercadopago  # type: ignore
-
-    return mercadopago.SDK(token)
-
-
 @app.post("/checkout/pix", response_model=PixCheckoutOut)
-def create_pix_checkout(
+def create_pix_checkout_route(
     payload: CheckoutCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -539,83 +442,7 @@ def create_pix_checkout(
     if (course.price or 0) <= 0:
         raise HTTPException(status_code=400, detail="Este curso é gratuito e não exige PIX.")
 
-    purchase = Purchase(
-        user_id=current_user.id,
-        course_id=course.id,
-        amount_cents=_to_cents(course.price),
-        currency="BRL",
-        status="pending",
-        provider="mercadopago",
-    )
-    db.add(purchase)
-    db.commit()
-    db.refresh(purchase)
-
-    if _pix_receiver_key() and not _mercadopago_enabled():
-        response = _static_pix_checkout_response(purchase, course)
-        db.commit()
-        db.refresh(purchase)
-        return response
-
-    if _pix_mock_enabled():
-        response = _mock_pix_checkout_response(purchase)
-        db.commit()
-        db.refresh(purchase)
-        return response
-
-    sdk = _mp_sdk()
-    payment_data = {
-        "transaction_amount": float(purchase.amount_cents) / 100.0,
-        "description": f"Curso: {course.title}",
-        "payment_method_id": "pix",
-        "external_reference": str(purchase.id),
-        "payer": {"email": current_user.email},
-    }
-
-    try:
-        from mercadopago.config import RequestOptions  # type: ignore
-
-        request_options = RequestOptions()
-        request_options.custom_headers = {"x-idempotency-key": uuid4().hex}
-        result = sdk.payment().create(payment_data, request_options)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Falha ao criar cobrança PIX no Mercado Pago: {exc}",
-        ) from exc
-
-    status_code = result.get("status")
-    if status_code and status_code >= 400:
-        message = (result.get("response") or {}).get("message") or result
-        raise HTTPException(status_code=502, detail=f"Mercado Pago recusou o PIX: {message}")
-
-    payment = result.get("response") or {}
-    mp_payment_id = str(payment.get("id") or "")
-    purchase.provider_reference = mp_payment_id or None
-    db.commit()
-    db.refresh(purchase)
-
-    tx = (
-        (payment.get("point_of_interaction") or {})
-        .get("transaction_data") or {}
-    )
-    qr_code_base64 = str(tx.get("qr_code_base64") or "")
-    qr_code = str(tx.get("qr_code") or "")
-    ticket_url = tx.get("ticket_url")
-
-    if not qr_code_base64 or not qr_code:
-        raise HTTPException(status_code=502, detail="Mercado Pago não retornou dados do PIX.")
-
-    return {
-        "purchase": purchase,
-        "provider": "mercadopago",
-        "provider_reference": mp_payment_id,
-        "qr_code_base64": qr_code_base64,
-        "qr_code": qr_code,
-        "ticket_url": ticket_url,
-    }
+    return create_pix_checkout(db, current_user, course)
 
 @app.post("/checkout", response_model=CheckoutOut)
 def create_checkout(
@@ -693,66 +520,11 @@ def delete_my_purchase(
     db.commit()
 
 
+@app.get("/payments/webhook")
 @app.post("/payments/webhook")
 async def payments_webhook(request: Request, db: Session = Depends(get_db)):
-    """
-    Webhook genérico para provedores (Stripe/MercadoPago).
-    Nesta fase, só armazena o payload para auditoria.
-    """
-    raw = await request.body()
-    payload_text = raw.decode("utf-8", errors="replace")
-
-    # Log sempre
-    event = PaymentEvent(
-        purchase_id=0,
-        provider="unknown",
-        event_type="webhook",
-        payload=payload_text,
-    )
-    db.add(event)
-    db.commit()
-
-    # Mercado Pago costuma enviar: {"data":{"id":"<payment_id>"},"type":"payment"}
-    try:
-        body = json.loads(payload_text or "{}")
-    except Exception:
-        return {"ok": True}
-
-    payment_id = (
-        (body.get("data") or {}).get("id")
-        or body.get("id")
-    )
-    if not payment_id:
-        return {"ok": True}
-
-    # Buscar status real do pagamento e atualizar Purchase via external_reference.
-    try:
-        sdk = _mp_sdk()
-        payment = sdk.payment().get(str(payment_id)).get("response") or {}
-        external_ref = str(payment.get("external_reference") or "")
-        status_mp = str(payment.get("status") or "")
-        purchase_id = int(external_ref) if external_ref.isdigit() else 0
-        if purchase_id:
-            purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
-            if purchase:
-                event.purchase_id = purchase.id
-                event.provider = "mercadopago"
-                event.event_type = f"payment.{status_mp}"
-                purchase.provider = "mercadopago"
-                purchase.provider_reference = str(payment.get("id") or purchase.provider_reference or "")
-                if status_mp == "approved":
-                    finalize_purchase_as_paid(db, purchase)
-                elif status_mp in {"cancelled", "rejected"}:
-                    purchase.status = status_mp
-                    db.commit()
-                else:
-                    purchase.status = "pending"
-                    db.commit()
-    except Exception:
-        # webhook não deve falhar
-        return {"ok": True}
-
-    return {"ok": True}
+    """Webhook Mercado Pago: confirma PIX e libera matrícula automaticamente."""
+    return await process_payment_webhook(request, db)
 
 
 @app.post("/purchases/{purchase_id}/confirm-payment", response_model=PurchaseOut)
@@ -779,8 +551,7 @@ def student_confirm_payment(
     if purchase.status not in {"pending"}:
         raise HTTPException(status_code=400, detail="Esta compra não pode ser confirmada.")
 
-    finalize_purchase_as_paid(db, purchase)
-    return purchase
+    return confirm_payment_manually(db, purchase)
 
 
 @app.post("/admin/purchases/{purchase_id}/mark-paid", response_model=PurchaseOut)

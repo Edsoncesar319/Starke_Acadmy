@@ -310,19 +310,31 @@ export class PortalDataService {
   }
 
   async pollPixStatus(purchaseId: number): Promise<void> {
-    // Poll simples a cada 3s por até ~2 minutos.
+    const checkout = this.pixCheckout();
+    const isMercadoPago = checkout?.provider === 'mercadopago';
+    const timeoutMs = isMercadoPago ? 300_000 : 120_000;
     const start = Date.now();
-    while (Date.now() - start < 120_000 && this.pixModalOpen()) {
+
+    while (Date.now() - start < timeoutMs && this.pixModalOpen()) {
       try {
         const purchase = await firstValueFrom(
           this.http.get<{ id: number; status: string; course_id: number }>(`${this.apiUrl}/purchases/${purchaseId}`),
         );
         if (purchase.status === 'paid') {
+          const current = this.pixCheckout();
+          if (current) {
+            this.pixCheckout.set({
+              ...current,
+              purchase: {
+                id: purchase.id,
+                status: purchase.status,
+                course_id: purchase.course_id,
+              },
+            });
+          }
           this.pixStatus.set('Pagamento confirmado! Comprovante disponível no seu painel.');
           await this.refreshPortalData();
           await this.refreshPurchases();
-          this.pixModalOpen.set(false);
-          this.pixCheckout.set(null);
           return;
         }
       } catch {
@@ -330,8 +342,13 @@ export class PortalDataService {
       }
       await new Promise((r) => setTimeout(r, 3000));
     }
+
     if (this.pixModalOpen()) {
-      this.pixStatus.set('Pagamento não confirmado ainda. Você pode aguardar e tentar novamente.');
+      this.pixStatus.set(
+        isMercadoPago
+          ? 'Pagamento ainda não confirmado. Se já pagou, aguarde mais um pouco ou atualize a página.'
+          : 'Pagamento não confirmado ainda. Você pode aguardar e tentar novamente.',
+      );
     }
   }
 

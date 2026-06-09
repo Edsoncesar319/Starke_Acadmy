@@ -14,12 +14,7 @@ import { PortalDataService } from '../services/portal-data.service';
             <h1 class="text-xl font-semibold text-gold-300">Pagamento via PIX</h1>
             <p class="mt-1 text-xs text-slate-400">Escaneie o QR Code ou copie e cole no app do seu banco.</p>
           </div>
-          <a
-            routerLink="/catalog"
-            class="btn-outline w-full sm:w-auto"
-          >
-            Voltar ao catálogo
-          </a>
+          <a routerLink="/catalog" class="btn-outline w-full sm:w-auto"> Voltar ao catálogo </a>
         </div>
       </div>
 
@@ -28,12 +23,18 @@ import { PortalDataService } from '../services/portal-data.service';
       }
 
       @if (data.pixCheckout(); as pix) {
-        @if (pix.provider === 'pix' || pix.provider === 'mock') {
+        @if (pix.provider === 'mercadopago') {
           <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
-            Após pagar, clique em <strong class="text-gold-300">Confirmar pagamento</strong>. O status será
-            atualizado para pago, você receberá o comprovante no chat do painel e o curso será liberado.
+            Após pagar, a confirmação é <strong class="text-gold-300">automática</strong>. O curso será liberado assim
+            que o Mercado Pago notificar o sistema — geralmente em poucos segundos.
+          </p>
+        } @else {
+          <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
+            Após pagar, clique em <strong class="text-gold-300">Confirmar pagamento</strong>. O status será atualizado
+            para pago, você receberá o comprovante no chat do painel e o curso será liberado.
           </p>
         }
+
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
             <h2 class="text-sm font-medium text-gold-300">QR Code</h2>
@@ -48,18 +49,9 @@ import { PortalDataService } from '../services/portal-data.service';
 
           <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
             <h2 class="text-sm font-medium text-gold-300">PIX copia e cola</h2>
-            <textarea
-              readonly
-              class="form-textarea mt-3 text-sm sm:text-base"
-            >{{ pix.qr_code }}</textarea>
+            <textarea readonly class="form-textarea mt-3 text-sm sm:text-base">{{ pix.qr_code }}</textarea>
             <div class="mt-3 flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                (click)="copyPix(pix.qr_code)"
-                class="btn-outline w-full flex-1"
-              >
-                Copiar
-              </button>
+              <button type="button" (click)="copyPix(pix.qr_code)" class="btn-outline w-full flex-1">Copiar</button>
               @if (pix.ticket_url) {
                 <a
                   class="btn-outline w-full flex-1 text-center"
@@ -76,20 +68,21 @@ import { PortalDataService } from '../services/portal-data.service';
 
         @if (pix.purchase.status !== 'paid') {
           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              (click)="confirmPayment()"
-              [disabled]="confirming()"
-              class="btn-success w-full sm:w-auto"
-            >
-              {{ confirming() ? 'Confirmando...' : 'Confirmar pagamento' }}
-            </button>
-            <a
-              routerLink="/dashboard"
-              class="btn-outline w-full text-center sm:w-auto"
-            >
-              Ver comprovante no painel
-            </a>
+            @if (pix.provider !== 'mercadopago') {
+              <button
+                type="button"
+                (click)="confirmPayment()"
+                [disabled]="confirming()"
+                class="btn-success w-full sm:w-auto"
+              >
+                {{ confirming() ? 'Confirmando...' : 'Confirmar pagamento' }}
+              </button>
+            } @else {
+              <p class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800/60 px-4 py-3 text-sm text-slate-300">
+                {{ polling() ? 'Aguardando confirmação do PIX...' : 'Verificando status do pagamento...' }}
+              </p>
+            }
+            <a routerLink="/dashboard" class="btn-outline w-full text-center sm:w-auto"> Ver comprovante no painel </a>
           </div>
         } @else {
           <div class="space-y-3">
@@ -124,6 +117,7 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   readonly confirming = signal(false);
+  readonly polling = signal(false);
 
   async ngOnInit(): Promise<void> {
     this.data.pixModalOpen.set(true);
@@ -134,14 +128,21 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Se não houver checkout gerado (ex: acesso direto na URL), gera aqui.
     if (!this.data.pixCheckout()) {
       await this.data.startPixCheckout(courseId);
+    }
+
+    const checkout = this.data.pixCheckout();
+    if (!checkout) {
       return;
     }
 
-    // Garante polling ativo.
-    void this.data.pollPixStatus(this.data.pixCheckout()!.purchase.id);
+    if (checkout.purchase.status === 'paid') {
+      return;
+    }
+
+    this.polling.set(true);
+    void this.data.pollPixStatus(checkout.purchase.id).finally(() => this.polling.set(false));
   }
 
   ngOnDestroy(): void {
@@ -150,7 +151,7 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
 
   async confirmPayment(): Promise<void> {
     const checkout = this.data.pixCheckout();
-    if (!checkout || checkout.purchase.status === 'paid') {
+    if (!checkout || checkout.purchase.status === 'paid' || checkout.provider === 'mercadopago') {
       return;
     }
 
@@ -201,4 +202,3 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
     }
   }
 }
-
