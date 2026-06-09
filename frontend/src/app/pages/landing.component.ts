@@ -8,37 +8,44 @@ import { AuthService } from '../services/auth.service';
   imports: [RouterLink],
   template: `
     <div class="landing-page">
-      <img
-        src="assets/landing-hero.png"
-        alt=""
-        class="landing-page__bg"
-        aria-hidden="true"
-        decoding="async"
-        fetchpriority="high"
-      />
-      <div class="landing-page__overlay" aria-hidden="true"></div>
-
-      <header class="relative z-20 flex items-center justify-end px-4 py-4 sm:px-6 md:px-8">
+      <header
+        class="relative z-30 flex items-center justify-end px-[clamp(1rem,4vw,2rem)] py-[clamp(0.75rem,2vw,1rem)]"
+      >
         <a routerLink="/admin/login" class="text-xs text-slate-300/80 transition hover:text-gold-300">
           Admin
         </a>
       </header>
 
-      <main class="relative z-20 mx-auto flex w-full max-w-5xl flex-col px-4 pb-12 sm:px-6 sm:pb-16 md:px-8">
-        <section
-          class="flex min-h-[min(68vh,680px)] w-full flex-col items-center justify-end pb-2 pt-8 text-center sm:min-h-[min(72vh,760px)] sm:pb-8"
-        >
-          <div class="mt-auto flex w-full max-w-md flex-col gap-3 sm:max-w-lg sm:flex-row sm:justify-center">
+      <section class="landing-page__hero" aria-label="Starke Academy">
+        <img
+          src="assets/landing-hero.png"
+          alt=""
+          class="landing-page__bg"
+          aria-hidden="true"
+          decoding="async"
+          fetchpriority="high"
+          width="1024"
+          height="682"
+        />
+        <div class="landing-page__overlay" aria-hidden="true"></div>
+
+        <div class="landing-page__cta">
+          <div class="landing-page__cta-inner">
             <a routerLink="/login" class="btn-primary w-full sm:flex-1">
               Entrar no portal
             </a>
-            <a routerLink="/matricula" class="btn-outline w-full bg-obsidian-900/40 backdrop-blur-sm sm:flex-1">
+            <a
+              routerLink="/matricula"
+              class="btn-outline w-full bg-obsidian-900/50 backdrop-blur-sm sm:flex-1"
+            >
               Fazer matrícula
             </a>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5 md:mt-12">
+      <main class="landing-page__content">
+        <section class="mt-[clamp(1.5rem,4vw,3rem)] grid w-full grid-cols-1 gap-[clamp(0.85rem,2.5vw,1.25rem)] sm:grid-cols-3">
           @for (item of highlights; track item.title) {
             <article class="panel text-center sm:text-left">
               <span
@@ -52,7 +59,7 @@ import { AuthService } from '../services/auth.service';
           }
         </section>
 
-        <section class="panel mt-10 w-full max-w-3xl text-center sm:mt-12">
+        <section class="panel mt-[clamp(1.5rem,4vw,3rem)] w-full max-w-3xl mx-auto text-center">
           <h2 class="text-lg font-semibold text-gold-300">Como começar</h2>
           <ol class="mt-4 space-y-3 text-left text-sm text-slate-300">
             <li class="flex gap-3">
@@ -87,7 +94,9 @@ import { AuthService } from '../services/auth.service';
         </section>
       </main>
 
-      <footer class="relative z-20 border-t border-gold-500/10 px-4 py-6 text-center text-xs text-slate-500">
+      <footer
+        class="relative z-20 border-t border-gold-500/10 px-[clamp(1rem,4vw,2rem)] py-[clamp(1rem,3vw,1.5rem)] text-center text-xs text-slate-500"
+      >
         © {{ year }} Starke Academy · Todos os direitos reservados
       </footer>
     </div>
