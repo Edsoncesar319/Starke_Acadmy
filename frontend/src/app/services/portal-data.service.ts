@@ -172,11 +172,15 @@ export class PortalDataService {
   });
 
   isPurchaseAwaitingPayment(purchase: Purchase): boolean {
-    return ['pending', 'in_process', 'in_mediation'].includes(purchase.status);
+    return ['pending', 'approved', 'in_process', 'in_mediation'].includes(purchase.status);
   }
 
-  canConfirmPaymentManually(purchase: Purchase): boolean {
-    return this.isPurchaseAwaitingPayment(purchase) && ['pix', 'mock'].includes(purchase.provider);
+  isPurchaseAwaitingAdminRelease(purchase: Purchase): boolean {
+    return purchase.status === 'approved';
+  }
+
+  canConfirmPaymentManually(_purchase: Purchase): boolean {
+    return false;
   }
 
   hasPaidPurchase(courseId: number): boolean {
@@ -310,7 +314,7 @@ export class PortalDataService {
       const started = await this.startPixCheckout(courseId);
       if (!started) return 'error';
       this.status.set(
-        `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após a confirmação.`,
+        `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após confirmação do administrador.`,
       );
       return 'payment';
     }
@@ -332,7 +336,7 @@ export class PortalDataService {
       if (status === 402) {
         await this.startPixCheckout(courseId);
         this.status.set(
-          `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após a confirmação.`,
+          `Para se matricular em "${courseTitle}", finalize o pagamento PIX. As aulas são liberadas após confirmação do administrador.`,
         );
         return 'payment';
       }
@@ -405,6 +409,13 @@ export class PortalDataService {
           }
           this.pixStatus.set('Pagamento confirmado! Comprovante disponível no seu painel.');
           await this.refreshPortalData();
+          await this.refreshPurchases();
+          return;
+        }
+        if (purchase.status === 'approved') {
+          this.pixStatus.set(
+            'Pagamento recebido. Aguarde o administrador liberar suas aulas — você será notificado no painel.',
+          );
           await this.refreshPurchases();
           return;
         }

@@ -23,17 +23,10 @@ import { PortalDataService } from '../services/portal-data.service';
       }
 
       @if (data.pixCheckout(); as pix) {
-        @if (pix.provider === 'mercadopago') {
-          <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
-            Após pagar, a confirmação é <strong class="text-gold-300">automática</strong>. O curso será liberado assim
-            que o Mercado Pago notificar o sistema — geralmente em poucos segundos.
-          </p>
-        } @else {
-          <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
-            Após pagar, clique em <strong class="text-gold-300">Confirmar pagamento</strong>. O status será atualizado
-            para pago, você receberá o comprovante no chat do painel e o curso será liberado.
-          </p>
-        }
+        <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
+          Após pagar o PIX, o <strong class="text-gold-300">administrador</strong> validará o pagamento e liberará suas
+          aulas. Você receberá o comprovante no chat do painel quando a matrícula for confirmada.
+        </p>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
@@ -68,21 +61,14 @@ import { PortalDataService } from '../services/portal-data.service';
 
         @if (pix.purchase.status !== 'paid') {
           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            @if (pix.provider !== 'mercadopago') {
-              <button
-                type="button"
-                (click)="confirmPayment()"
-                [disabled]="confirming()"
-                class="btn-success w-full sm:w-auto"
-              >
-                {{ confirming() ? 'Confirmando...' : 'Confirmar pagamento' }}
-              </button>
-            } @else {
-              <p class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800/60 px-4 py-3 text-sm text-slate-300">
-                {{ polling() ? 'Aguardando confirmação do PIX...' : 'Verificando status do pagamento...' }}
-              </p>
-            }
-            <a routerLink="/dashboard" class="btn-outline w-full text-center sm:w-auto"> Ver comprovante no painel </a>
+            <p class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800/60 px-4 py-3 text-sm text-slate-300">
+              @if (pix.purchase.status === 'approved') {
+                Pagamento recebido. Aguardando liberação pelo administrador.
+              } @else {
+                {{ polling() ? 'Aguardando validação do pagamento...' : 'Após pagar, aguarde a confirmação do administrador.' }}
+              }
+            </p>
+            <a routerLink="/pagamentos" class="btn-outline w-full text-center sm:w-auto"> Ver meus pagamentos </a>
           </div>
         } @else {
           <div class="space-y-3">
@@ -116,7 +102,6 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
   readonly data = inject(PortalDataService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
-  readonly confirming = signal(false);
   readonly polling = signal(false);
 
   async ngOnInit(): Promise<void> {
@@ -147,21 +132,6 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.data.pixModalOpen.set(false);
-  }
-
-  async confirmPayment(): Promise<void> {
-    const checkout = this.data.pixCheckout();
-    if (!checkout || checkout.purchase.status === 'paid' || checkout.provider === 'mercadopago') {
-      return;
-    }
-
-    this.confirming.set(true);
-    const ok = await this.data.confirmPayment(checkout.purchase.id);
-    this.confirming.set(false);
-
-    if (ok) {
-      await this.router.navigateByUrl('/dashboard');
-    }
   }
 
   printReceipt(): void {

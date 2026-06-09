@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 from uuid import uuid4
 
@@ -160,12 +161,16 @@ def _static_pix_checkout_response(purchase: Purchase, course: Course, db: Sessio
         raise HTTPException(status_code=503, detail="Chave PIX não configurada (PIX_RECEIVER_KEY).")
 
     txid = f"COMPRA{purchase.id}"
+    amount_brl = float(
+        (Decimal(purchase.amount_cents) / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    )
     copia_cola = build_pix_copia_cola(
         pix_key=pix_key,
-        amount_brl=purchase.amount_cents / 100.0,
+        amount_brl=amount_brl,
         merchant_name=_pix_merchant_name(),
         merchant_city=_pix_merchant_city(),
         txid=txid,
+        description=f"Curso {course.title}"[:72],
     )
     try:
         qr_base64 = pix_qr_code_base64(copia_cola)
@@ -372,7 +377,9 @@ def apply_mercadopago_payment(db: Session, payment: dict[str, Any], event: Payme
     purchase.provider_reference = str(payment.get("id") or purchase.provider_reference or "")
 
     if status_mp == "approved":
-        finalize_purchase_as_paid(db, purchase)
+        if purchase.status != "paid":
+            purchase.status = "approved"
+            db.commit()
         return True
 
     if status_mp in {"cancelled", "rejected", "refunded", "charged_back"}:

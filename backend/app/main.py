@@ -49,7 +49,6 @@ from .models import (
 from .course_access import assert_student_course_access, has_course_access
 from .payments import finalize_purchase_as_paid
 from .pix_checkout import (
-    confirm_payment_manually,
     create_pix_checkout,
     payment_status,
     process_payment_webhook,
@@ -68,6 +67,7 @@ from .schemas import (
     LessonUpdate,
     ProgressUpdate,
     PurchaseOut,
+    AdminPurchaseOut,
     StudentMessageCreate,
     StudentMessageOut,
     StudentMessageReplyCreate,
@@ -545,7 +545,7 @@ def student_confirm_payment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Aluno confirma que realizou o PIX; libera curso e envia comprovante no chat."""
+    """Pagamentos só são confirmados pelo super admin no painel administrativo."""
     if current_user.is_admin:
         raise HTTPException(status_code=403, detail="Use o painel administrativo para confirmar pagamentos.")
 
@@ -557,13 +557,48 @@ def student_confirm_payment(
     if not purchase:
         raise HTTPException(status_code=404, detail="Compra não encontrada")
 
-    if purchase.status == "paid":
-        return purchase
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "A confirmação do pagamento e a liberação das aulas são feitas pelo administrador. "
+            "Após pagar o PIX, aguarde a validação no painel da Starke Academy."
+        ),
+    )
 
-    if purchase.status not in {"pending"}:
-        raise HTTPException(status_code=400, detail="Esta compra não pode ser confirmada.")
 
-    return confirm_payment_manually(db, purchase)
+def _purchase_to_admin_out(db: Session, purchase: Purchase) -> dict:
+    user = db.query(User).filter(User.id == purchase.user_id).first()
+    course = db.query(Course).filter(Course.id == purchase.course_id).first()
+    return {
+        "id": purchase.id,
+        "user_id": purchase.user_id,
+        "user_name": user.name if user else f"Usuário #{purchase.user_id}",
+        "user_email": user.email if user else "",
+        "course_id": purchase.course_id,
+        "course_title": course.title if course else f"Curso #{purchase.course_id}",
+        "amount_cents": purchase.amount_cents,
+        "currency": purchase.currency,
+        "status": purchase.status,
+        "provider": purchase.provider,
+        "provider_reference": purchase.provider_reference,
+        "created_at": purchase.created_at,
+        "paid_at": purchase.paid_at,
+    }
+
+
+@app.get("/admin/purchases/pending", response_model=list[AdminPurchaseOut])
+def admin_list_pending_purchases(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Compras aguardando confirmação do super admin para liberar matrícula e aulas."""
+    rows = (
+        db.query(Purchase)
+        .filter(Purchase.status.in_(("pending", "approved", "in_process")))
+        .order_by(Purchase.created_at.desc())
+        .all()
+    )
+    return [_purchase_to_admin_out(db, row) for row in rows]
 
 
 @app.post("/admin/purchases/{purchase_id}/mark-paid", response_model=PurchaseOut)
@@ -575,6 +610,13 @@ def admin_mark_purchase_paid(
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Compra não encontrada")
+
+    if purchase.status == "paid":
+        return purchase
+
+    if purchase.status not in {"pending", "approved", "in_process"}:
+        raise HTTPException(status_code=400, detail="Esta compra não pode ser confirmada.")
+
     finalize_purchase_as_paid(db, purchase)
     return purchase
 

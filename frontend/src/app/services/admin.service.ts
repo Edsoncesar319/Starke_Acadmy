@@ -96,6 +96,22 @@ export interface LessonQuizPayload {
   questions: LessonQuizQuestion[];
 }
 
+export interface AdminPurchase {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  course_id: number;
+  course_title: string;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  provider: string;
+  provider_reference: string | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private readonly apiUrl = environment.apiUrl;
@@ -105,6 +121,7 @@ export class AdminService {
   readonly instructors = signal<AdminUser[]>([]);
   readonly sentMessages = signal<AdminSentMessage[]>([]);
   readonly lessons = signal<AdminLesson[]>([]);
+  readonly pendingPurchases = signal<AdminPurchase[]>([]);
   readonly status = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   constructor(private readonly http: HttpClient) {}
@@ -120,11 +137,12 @@ export class AdminService {
 
   async refreshDashboard(silent = true): Promise<number> {
     try {
-      const [courses, students, instructors, messages] = await Promise.all([
+      const [courses, students, instructors, messages, pendingPurchases] = await Promise.all([
         firstValueFrom(this.http.get<AdminCourse[]>(`${this.apiUrl}/courses`)),
         firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/students`)),
         firstValueFrom(this.http.get<AdminUser[]>(`${this.apiUrl}/admin/instructors`)),
         firstValueFrom(this.http.get<AdminSentMessage[]>(`${this.apiUrl}/admin/messages`)),
+        firstValueFrom(this.http.get<AdminPurchase[]>(`${this.apiUrl}/admin/purchases/pending`)),
       ]);
       const previousIds = new Set(this.students().map((student) => student.id));
       const newStudents = students.filter((student) => !previousIds.has(student.id));
@@ -133,6 +151,7 @@ export class AdminService {
       this.students.set(students);
       this.instructors.set(instructors);
       this.sentMessages.set(messages);
+      this.pendingPurchases.set(pendingPurchases);
 
       if (newStudents.length > 0 && !silent) {
         const label = newStudents.length === 1 ? '1 novo aluno matriculado' : `${newStudents.length} novos alunos matriculados`;
@@ -145,6 +164,21 @@ export class AdminService {
         this.error.set('Não foi possível atualizar os dados do painel.');
       }
       return 0;
+    }
+  }
+
+  async confirmPurchasePayment(purchaseId: number): Promise<boolean> {
+    this.error.set(null);
+    try {
+      await firstValueFrom(
+        this.http.post(`${this.apiUrl}/admin/purchases/${purchaseId}/mark-paid`, {}),
+      );
+      this.status.set('Pagamento confirmado. Matrícula e aulas liberadas para o aluno.');
+      await this.refreshDashboard(false);
+      return true;
+    } catch {
+      this.error.set('Não foi possível confirmar o pagamento.');
+      return false;
     }
   }
 

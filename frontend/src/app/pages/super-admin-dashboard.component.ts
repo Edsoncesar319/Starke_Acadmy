@@ -40,6 +40,61 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
       <article class="panel">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
+            <h2 class="text-lg font-medium text-gold-300">Pagamentos aguardando confirmação</h2>
+            <p class="text-xs text-slate-500">
+              Confirme o PIX recebido para matricular o aluno e liberar o acesso às aulas.
+            </p>
+          </div>
+          <span class="rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-300">
+            {{ admin.pendingPurchases().length }} pendente(s)
+          </span>
+        </div>
+
+        @if (admin.pendingPurchases().length === 0) {
+          <p class="rounded-lg border border-gold-500/15 bg-obsidian-800/60 px-4 py-6 text-center text-sm text-slate-400">
+            Nenhum pagamento aguardando confirmação.
+          </p>
+        } @else {
+          <div class="space-y-3">
+            @for (purchase of admin.pendingPurchases(); track purchase.id) {
+              <div class="rounded-lg border border-gold-500/20 bg-obsidian-800/60 p-4">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div class="min-w-0">
+                    <p class="font-medium text-slate-100">
+                      Compra #{{ purchase.id }} · {{ purchase.course_title }}
+                    </p>
+                    <p class="mt-1 text-sm text-slate-300">{{ purchase.user_name }} · {{ purchase.user_email }}</p>
+                    <p class="mt-1 text-xs text-slate-500">
+                      {{ formatPurchaseAmount(purchase.amount_cents, purchase.currency) }} ·
+                      {{ formatTime(purchase.created_at) }} · {{ purchase.provider }} ·
+                      {{ formatPurchaseStatus(purchase.status) }}
+                    </p>
+                    @if (purchase.provider_reference) {
+                      <p class="mt-1 text-xs text-slate-500">Ref.: {{ purchase.provider_reference }}</p>
+                    }
+                  </div>
+                  <button
+                    type="button"
+                    (click)="confirmPurchase(purchase)"
+                    [disabled]="confirmingPurchaseId() === purchase.id"
+                    class="btn-success w-full shrink-0 lg:w-auto"
+                  >
+                    {{
+                      confirmingPurchaseId() === purchase.id
+                        ? 'Confirmando...'
+                        : 'Confirmar pagamento e liberar aulas'
+                    }}
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </article>
+
+      <article class="panel">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
             <h2 class="text-lg font-medium text-gold-300">Todos os alunos no banco</h2>
             <p class="text-xs text-slate-500">Lista completa de usuários matriculados (não administradores).</p>
           </div>
@@ -764,6 +819,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   readonly lessonSavingId = signal<number | null>(null);
   readonly editingQuizLessonId = signal<number | null>(null);
   readonly imageUploading = signal<Record<number, boolean>>({});
+  readonly confirmingPurchaseId = signal<number | null>(null);
   newCourse = this.emptyCourseForm();
   newLesson = {
     module_name: '',
@@ -1188,6 +1244,35 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
       hour: '2-digit',
       minute: '2-digit',
     });
+  }
+
+  formatPurchaseAmount(amountCents: number, currency: string): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency || 'BRL' }).format(
+      (amountCents || 0) / 100,
+    );
+  }
+
+  formatPurchaseStatus(status: string): string {
+    const labels: Record<string, string> = {
+      pending: 'PIX pendente',
+      approved: 'PIX recebido (Mercado Pago)',
+      in_process: 'Processando',
+    };
+    return labels[status] ?? status;
+  }
+
+  async confirmPurchase(purchase: { id: number; user_name: string; course_title: string }): Promise<void> {
+    const confirmed = window.confirm(
+      `Confirmar pagamento da compra #${purchase.id}?\n\n` +
+        `Aluno: ${purchase.user_name}\n` +
+        `Curso: ${purchase.course_title}\n\n` +
+        `O aluno será matriculado e terá acesso às aulas.`,
+    );
+    if (!confirmed) return;
+
+    this.confirmingPurchaseId.set(purchase.id);
+    await this.admin.confirmPurchasePayment(purchase.id);
+    this.confirmingPurchaseId.set(null);
   }
 
   private emptyCourseForm() {

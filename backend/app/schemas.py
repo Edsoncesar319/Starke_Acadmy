@@ -197,6 +197,22 @@ class PurchaseOut(BaseModel):
     paid_at: datetime | None = None
 
 
+class AdminPurchaseOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    course_id: int
+    course_title: str
+    amount_cents: int
+    currency: str
+    status: str
+    provider: str
+    provider_reference: str | None = None
+    created_at: datetime
+    paid_at: datetime | None = None
+
+
 class CheckoutOut(BaseModel):
     purchase: PurchaseOut
     checkout_url: str | None = None

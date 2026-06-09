@@ -10,7 +10,9 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
     <section class="page-section">
       <div class="panel">
         <h1 class="text-lg font-semibold text-gold-300">Meus pagamentos</h1>
-        <p class="mt-1 text-xs text-slate-400">Acompanhe cobranças pendentes e pagamentos aprovados.</p>
+        <p class="mt-1 text-xs text-slate-400">
+          Acompanhe cobranças pendentes. As aulas são liberadas após confirmação do administrador.
+        </p>
       </div>
 
       @if (data.status()) {
@@ -48,15 +50,14 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
                 >
                   {{ payingCourseId() === purchase.course_id ? 'Gerando PIX...' : 'Pagar com PIX' }}
                 </button>
-                @if (data.canConfirmPaymentManually(purchase)) {
-                  <button
-                    type="button"
-                    (click)="confirmPayment(purchase.id)"
-                    [disabled]="confirmingId() === purchase.id"
-                    class="btn-success w-full sm:w-auto"
-                  >
-                    {{ confirmingId() === purchase.id ? 'Confirmando...' : 'Confirmar pagamento' }}
-                  </button>
+                @if (data.isPurchaseAwaitingAdminRelease(purchase)) {
+                  <p class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800/60 px-3 py-2 text-xs text-slate-300 sm:w-auto">
+                    Pagamento recebido — aguardando liberação pelo administrador.
+                  </p>
+                } @else if (data.isPurchaseAwaitingPayment(purchase)) {
+                  <p class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800/60 px-3 py-2 text-xs text-slate-300 sm:w-auto">
+                    Após pagar, aguarde a confirmação do administrador para acessar as aulas.
+                  </p>
                 }
                 <button
                   type="button"
@@ -183,7 +184,6 @@ import { PortalDataService, Purchase } from '../services/portal-data.service';
 export class MyPaymentsComponent implements OnInit {
   readonly data = inject(PortalDataService);
   private readonly router = inject(Router);
-  readonly confirmingId = signal<number | null>(null);
   readonly removingId = signal<number | null>(null);
   readonly payingCourseId = signal<number | null>(null);
 
@@ -226,15 +226,6 @@ export class MyPaymentsComponent implements OnInit {
     this.removingId.set(null);
   }
 
-  async confirmPayment(purchaseId: number): Promise<void> {
-    this.confirmingId.set(purchaseId);
-    const ok = await this.data.confirmPayment(purchaseId);
-    this.confirmingId.set(null);
-    if (ok) {
-      await this.router.navigateByUrl('/dashboard');
-    }
-  }
-
   async payWithPix(purchase: Purchase): Promise<void> {
     await this.openPixCheckout(purchase.course_id);
   }
@@ -270,7 +261,7 @@ export class MyPaymentsComponent implements OnInit {
       in_mediation: 'Em análise',
       cancelled: 'Cancelado',
       rejected: 'Recusado',
-      approved: 'Aprovado',
+      approved: 'Aguardando liberação',
     };
     return labels[status] ?? status;
   }
