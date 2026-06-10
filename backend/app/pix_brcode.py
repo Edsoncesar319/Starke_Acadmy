@@ -7,6 +7,9 @@ import io
 import re
 import unicodedata
 
+# Limite EMV do template Merchant Account Information (campo 26).
+_MAX_MERCHANT_ACCOUNT_LEN = 99
+
 
 def _crc16_ccitt(payload: str) -> str:
     crc = 0xFFFF
@@ -40,35 +43,26 @@ def _sanitize_txid(txid: str) -> str:
     return cleaned or "***"
 
 
-def _normalize_pix_key(pix_key: str) -> str:
+def _prepare_pix_key(pix_key: str) -> str:
+    """Usa a chave exatamente como cadastrada no DICT (só remove espaços nas pontas)."""
     key = pix_key.strip()
     if not key:
         raise ValueError("Chave PIX não configurada")
-
-    if "@" in key:
-        return key.lower()
-
-    digits = re.sub(r"\D", "", key)
-    if len(digits) == 11 and key.replace(".", "").replace("-", "").isdigit():
-        return digits
-    if len(digits) == 14 and key.replace(".", "").replace("/", "").replace("-", "").isdigit():
-        return digits
-
-    if re.match(r"^[\d\s()+-]+$", key) and len(digits) >= 10:
-        if key.startswith("+"):
-            return f"+{digits}" if not key.startswith("+55") else f"+{digits}"
-        if len(digits) in (10, 11):
-            return f"+55{digits}"
-        return f"+{digits}"
-
-    if re.match(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        key,
-        re.I,
-    ):
-        return key.lower()
-
     return key
+
+
+def _build_merchant_account(pix_key: str, description: str | None = None) -> str:
+    key = _prepare_pix_key(pix_key)
+    merchant_account = _tlv("00", "br.gov.bcb.pix") + _tlv("01", key)
+
+    if description:
+        info = _sanitize_text(description, 72, fallback="")
+        if info:
+            candidate = merchant_account + _tlv("02", info)
+            if len(candidate) <= _MAX_MERCHANT_ACCOUNT_LEN:
+                return candidate
+
+    return merchant_account
 
 
 def build_pix_copia_cola(
@@ -80,14 +74,13 @@ def build_pix_copia_cola(
     txid: str,
     description: str | None = None,
 ) -> str:
-    key = _normalize_pix_key(pix_key)
     name = _sanitize_text(merchant_name, 25, fallback="Starke Academy")
     city = _sanitize_text(merchant_city, 15, fallback="Sao Paulo")
     reference = _sanitize_txid(txid)
+    merchant_account = _build_merchant_account(pix_key, description)
 
-    merchant_account = _tlv("00", "br.gov.bcb.pix") + _tlv("01", key)
-    info = _sanitize_text(description or "", 72, fallback="")
-    merchant_account += _tlv("02", info)
+    if len(merchant_account) > _MAX_MERCHANT_ACCOUNT_LEN:
+        raise ValueError("Chave PIX ou descrição excedem o limite do QR Code.")
 
     additional_data = _tlv("05", reference)
 

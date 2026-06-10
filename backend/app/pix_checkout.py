@@ -170,7 +170,6 @@ def _static_pix_checkout_response(purchase: Purchase, course: Course, db: Sessio
         merchant_name=_pix_merchant_name(),
         merchant_city=_pix_merchant_city(),
         txid=txid,
-        description=f"Curso {course.title}"[:72],
     )
     try:
         qr_base64 = pix_qr_code_base64(copia_cola)
