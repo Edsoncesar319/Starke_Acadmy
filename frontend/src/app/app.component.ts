@@ -4,7 +4,6 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { SideNavComponent } from './shared/side-nav.component';
 import { TopAppBarComponent } from './shared/top-app-bar.component';
-import { ViewportScaleControlComponent } from './shared/viewport-scale-control.component';
 import { AuthService } from './services/auth.service';
 import { PortalDataService } from './services/portal-data.service';
 import { SideNavLayoutService } from './services/side-nav-layout.service';
@@ -12,7 +11,7 @@ import { SideNavLayoutService } from './services/side-nav-layout.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [NgClass, RouterOutlet, SideNavComponent, TopAppBarComponent, ViewportScaleControlComponent],
+  imports: [NgClass, RouterOutlet, SideNavComponent, TopAppBarComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })

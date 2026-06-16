@@ -1,11 +1,12 @@
 import { NgClass } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { PortalDataService } from '../services/portal-data.service';
 import { SideNavLayoutService } from '../services/side-nav-layout.service';
+import { ViewportScaleService, ViewScalePercent } from '../services/viewport-scale.service';
 import { StarkeLogoComponent } from './starke-logo.component';
 
 interface NavItem {
@@ -107,6 +108,50 @@ interface NavItem {
       </nav>
 
       @if (layout.isDesktop()) {
+        <div class="relative mt-2 hidden shrink-0 md:block">
+          <button
+            type="button"
+            (click)="toggleScaleMenu($event)"
+            class="flex w-full items-center rounded-lg border border-gold-500/25 text-gold-300 transition hover:bg-gold-500/10"
+            [ngClass]="layout.collapsed() ? 'justify-center p-2.5' : 'gap-2 px-3 py-2.5 text-xs'"
+            [title]="'Visualização: ' + viewport.scale() + '%'"
+            [attr.aria-label]="'Visualização da tela, ' + viewport.scale() + '%'"
+            aria-haspopup="listbox"
+            [attr.aria-expanded]="scaleMenuOpen()"
+          >
+            <mat-icon class="material-symbols-rounded shrink-0">photo_size_select_large</mat-icon>
+            @if (!layout.collapsed()) {
+              <span class="truncate">Visualização</span>
+              <span class="ml-auto font-semibold text-gold-300/90">{{ viewport.scale() }}%</span>
+            }
+          </button>
+
+          @if (scaleMenuOpen()) {
+            <div
+              class="side-nav-scale-menu"
+              [class.side-nav-scale-menu--collapsed]="layout.collapsed()"
+              role="listbox"
+              aria-label="Tamanho da visualização"
+              (click)="$event.stopPropagation()"
+            >
+              @for (option of viewport.options; track option) {
+                <button
+                  type="button"
+                  role="option"
+                  class="side-nav-scale-menu__item"
+                  [class.side-nav-scale-menu__item--active]="viewport.scale() === option"
+                  [attr.aria-selected]="viewport.scale() === option"
+                  (click)="setScale(option)"
+                >
+                  {{ option }}%
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (layout.isDesktop()) {
         <button
           type="button"
           (click)="layout.toggle()"
@@ -132,6 +177,8 @@ interface NavItem {
 export class SideNavComponent implements OnInit, OnDestroy {
   readonly data = inject(PortalDataService);
   readonly layout = inject(SideNavLayoutService);
+  readonly viewport = inject(ViewportScaleService);
+  readonly scaleMenuOpen = signal(false);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private routerSub?: Subscription;
@@ -175,9 +222,28 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
+    if (this.scaleMenuOpen()) {
+      this.scaleMenuOpen.set(false);
+      return;
+    }
     if (this.layout.mobileOpen() && !this.layout.isDesktop()) {
       this.layout.closeMobile();
     }
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.scaleMenuOpen.set(false);
+  }
+
+  toggleScaleMenu(event: Event): void {
+    event.stopPropagation();
+    this.scaleMenuOpen.update((open) => !open);
+  }
+
+  setScale(percent: ViewScalePercent): void {
+    this.viewport.setScale(percent);
+    this.scaleMenuOpen.set(false);
   }
 
   private readonly scrollLockEffect = effect(() => {
