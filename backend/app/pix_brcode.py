@@ -65,6 +65,40 @@ def _build_merchant_account(pix_key: str, description: str | None = None) -> str
     return merchant_account
 
 
+def build_pix_direct_key_brcode(
+    *,
+    pix_key: str,
+    merchant_name: str,
+    merchant_city: str,
+) -> str:
+    """
+    QR estático só com a chave PIX (sem valor fixo no payload).
+    Equivale a pagar direto pela chave cadastrada — o valor é informado no app do banco.
+    Formato alinhado ao exemplo do BACEN (QR estático sem valor).
+    """
+    key = _prepare_pix_key(pix_key)
+    name = _sanitize_text(merchant_name, 25, fallback="Starke Academy")
+    city = _sanitize_text(merchant_city, 15, fallback="Sao Paulo")
+    merchant_account = _tlv("00", "br.gov.bcb.pix") + _tlv("01", key)
+
+    if len(merchant_account) > _MAX_MERCHANT_ACCOUNT_LEN:
+        raise ValueError("Chave PIX excede o limite do QR Code.")
+
+    payload_parts = [
+        _tlv("00", "01"),
+        _tlv("26", merchant_account),
+        _tlv("52", "0000"),
+        _tlv("53", "986"),
+        _tlv("58", "BR"),
+        _tlv("59", name),
+        _tlv("60", city),
+        _tlv("62", _tlv("05", "***")),
+        "6304",
+    ]
+    payload_without_crc = "".join(payload_parts)
+    return payload_without_crc + _crc16_ccitt(payload_without_crc)
+
+
 def build_pix_copia_cola(
     *,
     pix_key: str,

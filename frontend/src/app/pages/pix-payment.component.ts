@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { PortalDataService } from '../services/portal-data.service';
 
@@ -12,7 +12,9 @@ import { PortalDataService } from '../services/portal-data.service';
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 class="text-xl font-semibold text-gold-300">Pagamento via PIX</h1>
-            <p class="mt-1 text-xs text-slate-400">Escaneie o QR Code ou copie e cole no app do seu banco.</p>
+            <p class="mt-1 text-xs text-slate-400">
+              Pague direto pela chave cadastrada da Starke Academy ou escaneie o QR Code da chave.
+            </p>
           </div>
           <a routerLink="/catalog" class="btn-outline w-full sm:w-auto"> Voltar ao catálogo </a>
         </div>
@@ -28,9 +30,39 @@ import { PortalDataService } from '../services/portal-data.service';
           aulas. Você receberá o comprovante no chat do painel quando a matrícula for confirmada.
         </p>
 
+        <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/60 p-5">
+          <p class="text-xs uppercase tracking-wider text-gold-300">Valor a pagar</p>
+          <p class="mt-1 text-3xl font-semibold text-slate-100">{{ formatAmount(pix.amount_brl, coursePrice()) }}</p>
+          <p class="mt-2 text-xs text-slate-400">
+            Compra #{{ pix.purchase.id }} · {{ courseTitle(pix.purchase.course_id) }}
+          </p>
+        </div>
+
+        @if (pix.pix_key) {
+          <div class="rounded-xl border border-emerald-500/30 bg-emerald-900/10 p-5">
+            <h2 class="text-sm font-medium text-emerald-300">Chave PIX (pagamento direto)</h2>
+            <p class="mt-1 text-xs text-slate-400">
+              Copie a chave abaixo, cole no app do seu banco e informe o valor exato de
+              {{ formatAmount(pix.amount_brl, coursePrice()) }}.
+            </p>
+            <div class="mt-3 rounded-lg border border-gold-500/20 bg-obsidian-900/80 px-4 py-3">
+              <p class="break-all font-mono text-sm text-slate-100">{{ pix.pix_key }}</p>
+            </div>
+            <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+              <button type="button" (click)="copyPix(pix.pix_key!)" class="btn-primary w-full sm:w-auto">
+                Copiar chave PIX
+              </button>
+              @if (pix.merchant_name) {
+                <span class="self-center text-xs text-slate-400">Recebedor: {{ pix.merchant_name }}</span>
+              }
+            </div>
+          </div>
+        }
+
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
-            <h2 class="text-sm font-medium text-gold-300">QR Code</h2>
+            <h2 class="text-sm font-medium text-gold-300">QR Code da chave</h2>
+            <p class="mt-1 text-xs text-slate-400">Escaneie para pagar direto na chave cadastrada.</p>
             <div class="mt-3 flex justify-center">
               <img
                 [src]="'data:image/png;base64,' + pix.qr_code_base64"
@@ -42,19 +74,10 @@ import { PortalDataService } from '../services/portal-data.service';
 
           <div class="rounded-xl border border-gold-500/20 bg-obsidian-700/60 p-5">
             <h2 class="text-sm font-medium text-gold-300">PIX copia e cola</h2>
+            <p class="mt-1 text-xs text-slate-400">Alternativa para apps que aceitam o código da chave PIX.</p>
             <textarea readonly class="form-textarea mt-3 text-sm sm:text-base">{{ pix.qr_code }}</textarea>
-            <div class="mt-3 flex flex-col gap-2 sm:flex-row">
-              <button type="button" (click)="copyPix(pix.qr_code)" class="btn-outline w-full flex-1">Copiar</button>
-              @if (pix.ticket_url) {
-                <a
-                  class="btn-outline w-full flex-1 text-center"
-                  [href]="pix.ticket_url"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Abrir
-                </a>
-              }
+            <div class="mt-3">
+              <button type="button" (click)="copyPix(pix.qr_code)" class="btn-outline w-full">Copiar código PIX</button>
             </div>
           </div>
         </div>
@@ -65,7 +88,11 @@ import { PortalDataService } from '../services/portal-data.service';
               @if (pix.purchase.status === 'approved') {
                 Pagamento recebido. Aguardando liberação pelo administrador.
               } @else {
-                {{ polling() ? 'Aguardando validação do pagamento...' : 'Após pagar, aguarde a confirmação do administrador.' }}
+                {{
+                  polling()
+                    ? 'Aguardando validação do pagamento...'
+                    : 'Após pagar pela chave PIX, aguarde a confirmação do administrador.'
+                }}
               }
             </p>
             <a routerLink="/pagamentos" class="btn-outline w-full text-center sm:w-auto"> Ver meus pagamentos </a>
@@ -104,6 +131,12 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   readonly polling = signal(false);
 
+  readonly coursePrice = computed(() => {
+    const checkout = this.data.pixCheckout();
+    if (!checkout) return 0;
+    return this.data.courses().find((c) => c.id === checkout.purchase.course_id)?.price ?? 0;
+  });
+
   async ngOnInit(): Promise<void> {
     this.data.pixModalOpen.set(true);
     const courseId = Number(this.route.snapshot.paramMap.get('courseId') ?? 0);
@@ -134,12 +167,19 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
     this.data.pixModalOpen.set(false);
   }
 
+  courseTitle(courseId: number): string {
+    return this.data.courses().find((c) => c.id === courseId)?.title ?? `Curso #${courseId}`;
+  }
+
+  formatAmount(amountBrl: number | null | undefined, fallbackPrice: number): string {
+    const value = amountBrl ?? fallbackPrice ?? 0;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  }
+
   printReceipt(): void {
     const checkout = this.data.pixCheckout();
     if (!checkout || checkout.purchase.status !== 'paid') return;
-    const courseTitle =
-      this.data.courses().find((c) => c.id === checkout.purchase.course_id)?.title ??
-      `Curso #${checkout.purchase.course_id}`;
+    const courseTitle = this.courseTitle(checkout.purchase.course_id);
     const purchase = this.data.purchases().find((p) => p.id === checkout.purchase.id);
     if (purchase) {
       this.data.printPurchaseReceipt(purchase, courseTitle);
@@ -166,7 +206,7 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
   async copyPix(value: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(value);
-      this.data.pixStatus.set('Código PIX copiado.');
+      this.data.pixStatus.set('Copiado para a área de transferência.');
     } catch {
       this.data.pixStatus.set('Não foi possível copiar automaticamente. Selecione e copie manualmente.');
     }

@@ -64,6 +64,9 @@ export interface PixCheckout {
   qr_code_base64: string;
   qr_code: string;
   ticket_url: string | null;
+  pix_key?: string | null;
+  amount_brl?: number | null;
+  merchant_name?: string | null;
 }
 
 export interface Purchase {

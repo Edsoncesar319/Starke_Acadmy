@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .models import Course, PaymentEvent, Purchase, User
 from .payments import finalize_purchase_as_paid
-from .pix_brcode import build_pix_copia_cola, pix_qr_code_base64
+from .pix_brcode import build_pix_direct_key_brcode, pix_qr_code_base64
 from .storage import on_vercel
 
 _MOCK_PIX_QR_BASE64 = (
@@ -144,6 +144,9 @@ def _checkout_payload(
     qr_code_base64: str,
     qr_code: str,
     ticket_url: str | None = None,
+    pix_key: str | None = None,
+    amount_brl: float | None = None,
+    merchant_name: str | None = None,
 ) -> dict[str, Any]:
     return {
         "purchase": purchase,
@@ -152,6 +155,9 @@ def _checkout_payload(
         "qr_code_base64": qr_code_base64,
         "qr_code": qr_code,
         "ticket_url": ticket_url,
+        "pix_key": pix_key,
+        "amount_brl": amount_brl,
+        "merchant_name": merchant_name,
     }
 
 
@@ -160,16 +166,15 @@ def _static_pix_checkout_response(purchase: Purchase, course: Course, db: Sessio
     if not pix_key:
         raise HTTPException(status_code=503, detail="Chave PIX não configurada (PIX_RECEIVER_KEY).")
 
+    merchant_name = _pix_merchant_name()
     txid = f"COMPRA{purchase.id}"
     amount_brl = float(
         (Decimal(purchase.amount_cents) / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     )
-    copia_cola = build_pix_copia_cola(
+    copia_cola = build_pix_direct_key_brcode(
         pix_key=pix_key,
-        amount_brl=amount_brl,
-        merchant_name=_pix_merchant_name(),
+        merchant_name=merchant_name,
         merchant_city=_pix_merchant_city(),
-        txid=txid,
     )
     try:
         qr_base64 = pix_qr_code_base64(copia_cola)
@@ -189,6 +194,9 @@ def _static_pix_checkout_response(purchase: Purchase, course: Course, db: Sessio
         provider_reference=txid,
         qr_code_base64=qr_base64,
         qr_code=copia_cola,
+        pix_key=pix_key.strip(),
+        amount_brl=amount_brl,
+        merchant_name=merchant_name,
     )
 
 

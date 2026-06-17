@@ -225,6 +225,9 @@ class PixCheckoutOut(BaseModel):
     qr_code_base64: str
     qr_code: str
     ticket_url: str | None = None
+    pix_key: str | None = None
+    amount_brl: float | None = None
+    merchant_name: str | None = None
 
 
 class TicketCreate(BaseModel):
