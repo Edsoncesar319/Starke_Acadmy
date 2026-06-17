@@ -75,6 +75,7 @@ from .schemas import (
     TicketOut,
     Token,
     AdminStudentUpdate,
+    AdminCredentials,
     UserCreate,
     UserOut,
     UserProfileUpdate,
@@ -619,6 +620,38 @@ def admin_mark_purchase_paid(
 
     finalize_purchase_as_paid(db, purchase)
     return purchase
+
+
+def _delete_all_purchases(db: Session) -> dict[str, int]:
+    events_deleted = db.query(PaymentEvent).delete(synchronize_session=False)
+    purchases_deleted = db.query(Purchase).delete(synchronize_session=False)
+    db.commit()
+    return {
+        "deleted_purchases": purchases_deleted,
+        "deleted_payment_events": events_deleted,
+    }
+
+
+@app.delete("/admin/purchases")
+def admin_purge_all_purchases(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Remove todas as compras e eventos de pagamento (super admin)."""
+    return _delete_all_purchases(db)
+
+
+@app.post("/admin/purchases/purge-all")
+def admin_purge_all_purchases_with_credentials(
+    credentials: AdminCredentials,
+    db: Session = Depends(get_db),
+):
+    """Remove todas as compras (autenticação por e-mail/senha no corpo — útil quando Bearer falha no proxy)."""
+    user = db.query(User).filter(User.email == credentials.email).first()
+    if not user or not user.is_admin or not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso negado.")
+    return _delete_all_purchases(db)
+
 
 @app.get("/courses/{course_id}/lessons")
 def list_course_lessons(

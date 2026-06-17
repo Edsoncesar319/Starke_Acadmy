@@ -8,6 +8,11 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class AdminCredentials(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
