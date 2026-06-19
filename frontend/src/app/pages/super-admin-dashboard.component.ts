@@ -1209,7 +1209,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
 
   logout(): void {
     this.auth.logout();
-    location.href = '/admin/login';
+    location.href = '/login';
   }
 
   private setImageUploading(courseId: number, value: boolean): void {

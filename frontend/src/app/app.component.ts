@@ -66,7 +66,6 @@ export class AppComponent {
       path !== '/forgot-password' &&
       path !== '/reset-password' &&
       path !== '/matricula' &&
-      path !== '/admin/login' &&
       !path.startsWith('/admin/')
     );
   }

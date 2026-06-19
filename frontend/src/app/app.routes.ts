@@ -2,9 +2,8 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router, Routes } from '@angular/router';
 import { CourseCatalogComponent } from './pages/course-catalog.component';
 import { DashboardComponent } from './pages/dashboard.component';
-import { AdminLoginComponent } from './pages/admin-login.component';
-import { LessonPlayerComponent } from './pages/lesson-player.component';
 import { LandingComponent } from './pages/landing.component';
+import { LessonPlayerComponent } from './pages/lesson-player.component';
 import { LoginComponent } from './pages/login.component';
 import { ForgotPasswordComponent } from './pages/forgot-password.component';
 import { ResetPasswordComponent } from './pages/reset-password.component';
@@ -25,7 +24,7 @@ const authGuard: CanActivateFn = () => {
 const adminGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
-  return auth.isAuthenticated() && auth.isAdmin() ? true : router.createUrlTree(['/admin/login']);
+  return auth.isAuthenticated() && auth.isAdmin() ? true : router.createUrlTree(['/login']);
 };
 
 const studentGuard: CanActivateFn = () => {
@@ -43,7 +42,7 @@ export const routes: Routes = [
   { path: 'forgot-password', component: ForgotPasswordComponent },
   { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'matricula', component: MatriculaComponent },
-  { path: 'admin/login', component: AdminLoginComponent },
+  { path: 'admin/login', redirectTo: 'login', pathMatch: 'full' },
   { path: 'admin/dashboard', component: SuperAdminDashboardComponent, canActivate: [adminGuard] },
   { path: 'dashboard', component: DashboardComponent, canActivate: [studentGuard] },
   { path: 'catalog', component: CourseCatalogComponent, canActivate: [studentGuard] },

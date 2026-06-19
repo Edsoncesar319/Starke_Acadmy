@@ -8,14 +8,6 @@ import { AuthService } from '../services/auth.service';
   imports: [RouterLink],
   template: `
     <div class="landing-page">
-      <header
-        class="relative z-30 flex items-center justify-end px-[clamp(1rem,4vw,2rem)] py-[clamp(0.75rem,2vw,1rem)]"
-      >
-        <a routerLink="/admin/login" class="text-xs text-slate-300/80 transition hover:text-gold-300">
-          Admin
-        </a>
-      </header>
-
       <section class="landing-page__hero" aria-label="Starke Academy">
         <img
           src="assets/landing-hero.png"
