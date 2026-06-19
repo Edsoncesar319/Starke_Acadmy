@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
@@ -40,7 +40,10 @@ export class AuthService {
   }
 
   async login(email: string, password: string): Promise<void> {
-    const body = new URLSearchParams({ username: email, password }).toString();
+    const body = new URLSearchParams({
+      username: email.trim(),
+      password,
+    }).toString();
     const response = await firstValueFrom(
       this.http.post<{ access_token: string }>(`${this.apiUrl}/auth/login`, body, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -49,6 +52,22 @@ export class AuthService {
     this._token.set(response.access_token);
     localStorage.setItem(this.tokenKey, response.access_token);
     await this.loadProfile();
+  }
+
+  loginErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 0) {
+        return 'Servidor indisponível. Verifique sua conexão ou se a API está ativa.';
+      }
+      const detail = err.error?.detail;
+      if (typeof detail === 'string') {
+        return detail === 'Credenciais inválidas' ? 'E-mail ou senha incorretos.' : detail;
+      }
+      if (err.status === 401) {
+        return 'E-mail ou senha incorretos.';
+      }
+    }
+    return 'Não foi possível entrar. Tente novamente.';
   }
 
   async requestPasswordReset(email: string): Promise<void> {

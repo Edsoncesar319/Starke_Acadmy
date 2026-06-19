@@ -107,8 +107,8 @@ export class LoginComponent {
         await this.data.refreshPortalData();
         await this.router.navigateByUrl('/dashboard');
       }
-    } catch {
-      this.error.set('Credenciais inválidas ou servidor indisponível.');
+    } catch (err) {
+      this.error.set(this.auth.loginErrorMessage(err));
     } finally {
       this.loading.set(false);
     }

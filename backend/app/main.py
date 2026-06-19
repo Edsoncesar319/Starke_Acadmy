@@ -1374,7 +1374,8 @@ async def blob_client_upload_endpoint(request: Request, db: Session = Depends(ge
 
     if body.get("type") == "blob.generate-client-token":
         authorization = request.headers.get("authorization")
-        user = get_user_from_authorization_header(authorization, db)
+        x_access_token = request.headers.get("x-access-token")
+        user = get_user_from_authorization_header(authorization, db, x_access_token=x_access_token)
         if not (user.is_admin or user.is_instructor):
             raise HTTPException(status_code=403, detail="Não autorizado para enviar vídeo")
 
