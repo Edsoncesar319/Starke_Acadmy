@@ -51,6 +51,18 @@ export class AuthService {
     await this.loadProfile();
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`${this.apiUrl}/auth/forgot-password`, { email }),
+    );
+  }
+
+  async resetPassword(token: string, password: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`${this.apiUrl}/auth/reset-password`, { token, password }),
+    );
+  }
+
   async loadProfile(): Promise<AuthProfile> {
     const me = await firstValueFrom(this.http.get<AuthProfile>(`${this.apiUrl}/me`));
     this._isAdmin.set(!!me.is_admin);

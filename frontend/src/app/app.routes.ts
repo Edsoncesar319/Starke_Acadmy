@@ -6,6 +6,8 @@ import { AdminLoginComponent } from './pages/admin-login.component';
 import { LessonPlayerComponent } from './pages/lesson-player.component';
 import { LandingComponent } from './pages/landing.component';
 import { LoginComponent } from './pages/login.component';
+import { ForgotPasswordComponent } from './pages/forgot-password.component';
+import { ResetPasswordComponent } from './pages/reset-password.component';
 import { MatriculaComponent } from './pages/matricula.component';
 import { MyPaymentsComponent } from './pages/my-payments.component';
 import { PixPaymentComponent } from './pages/pix-payment.component';
@@ -38,6 +40,8 @@ const studentGuard: CanActivateFn = () => {
 export const routes: Routes = [
   { path: '', component: LandingComponent },
   { path: 'login', component: LoginComponent },
+  { path: 'forgot-password', component: ForgotPasswordComponent },
+  { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'matricula', component: MatriculaComponent },
   { path: 'admin/login', component: AdminLoginComponent },
   { path: 'admin/dashboard', component: SuperAdminDashboardComponent, canActivate: [adminGuard] },

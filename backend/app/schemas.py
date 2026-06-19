@@ -38,6 +38,19 @@ class UserProfileUpdate(BaseModel):
     password: str | None = None
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
 class AdminStudentUpdate(BaseModel):
     name: str
     email: EmailStr

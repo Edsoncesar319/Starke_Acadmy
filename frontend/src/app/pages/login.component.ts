@@ -58,6 +58,11 @@ import { StarkeLogoComponent } from '../shared/starke-logo.component';
           placeholder="Senha"
           autocomplete="current-password"
         />
+        <p class="text-right">
+          <a routerLink="/forgot-password" class="text-xs text-gold-300 underline-offset-2 hover:underline">
+            Esqueceu a senha?
+          </a>
+        </p>
         <button
           type="submit"
           [disabled]="loading()"

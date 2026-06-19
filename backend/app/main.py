@@ -14,11 +14,13 @@ from sqlalchemy.orm import Session
 from .auth import (
     build_access_token_claims,
     create_access_token,
+    create_password_reset_token,
     get_current_admin,
     get_current_content_manager,
     get_current_user,
     get_user_from_authorization_header,
     verify_password,
+    verify_password_reset_token,
 )
 from .blob_client_upload import handle_blob_client_upload
 from .database import Base, SessionLocal, engine, ensure_schema_updates, get_db, DATABASE_URL
@@ -79,6 +81,9 @@ from .schemas import (
     UserCreate,
     UserOut,
     UserProfileUpdate,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    MessageResponse,
     LessonQuizAdminOut,
     LessonQuizSave,
     LessonQuizStudentOut,
@@ -87,6 +92,7 @@ from .schemas import (
     LessonProgressOut,
     CourseLessonProgressOut,
 )
+from .email_service import get_site_public_url, send_password_reset_email
 from .lesson_progress import (
     course_lesson_progress_list,
     lesson_progress_dict,
@@ -290,6 +296,36 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
     token = create_access_token(build_access_token_claims(user))
     return Token(access_token=token)
+
+
+@app.post("/auth/forgot-password", response_model=MessageResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user:
+        token = create_password_reset_token(user)
+        reset_url = f"{get_site_public_url()}/reset-password?token={token}"
+        send_password_reset_email(to_email=user.email, user_name=user.name, reset_url=reset_url)
+
+    return MessageResponse(
+        message="Se o e-mail estiver cadastrado, você receberá as instruções em breve."
+    )
+
+
+@app.post("/auth/reset-password", response_model=MessageResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 6 caracteres")
+
+    from .auth import get_password_hash
+
+    user_id = verify_password_reset_token(payload.token)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
+
+    user.password_hash = get_password_hash(payload.password)
+    db.commit()
+    return MessageResponse(message="Senha redefinida com sucesso. Você já pode fazer login.")
 
 
 @app.get("/me", response_model=UserOut)
