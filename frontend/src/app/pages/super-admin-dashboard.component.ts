@@ -130,13 +130,23 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                     <p class="text-xs text-gold-300/90">{{ student.student_level }}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  (click)="selectStudent(student.id)"
-                  class="btn-outline mt-3 w-full"
-                >
-                  {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
-                </button>
+                <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    (click)="selectStudent(student.id)"
+                    class="btn-outline flex-1"
+                  >
+                    {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                  </button>
+                  <button
+                    type="button"
+                    (click)="removeStudent(student)"
+                    [disabled]="removingStudentId() === student.id"
+                    class="btn-danger flex-1"
+                  >
+                    {{ removingStudentId() === student.id ? 'Removendo...' : 'Remover' }}
+                  </button>
+                </div>
               </div>
             }
           </div>
@@ -178,13 +188,23 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
                     <td class="max-w-[12rem] truncate px-4 py-3 text-slate-300">{{ student.email }}</td>
                     <td class="px-4 py-3 text-gold-300/90">{{ student.student_level }}</td>
                     <td class="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        (click)="selectStudent(student.id)"
-                        class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
-                      >
-                        {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
-                      </button>
+                      <div class="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          (click)="selectStudent(student.id)"
+                          class="rounded border border-gold-500/40 px-2 py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                        >
+                          {{ student.id === selectedUserId ? 'Selecionado' : 'Selecionar' }}
+                        </button>
+                        <button
+                          type="button"
+                          (click)="removeStudent(student)"
+                          [disabled]="removingStudentId() === student.id"
+                          class="rounded border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                        >
+                          {{ removingStudentId() === student.id ? 'Removendo...' : 'Remover' }}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 }
@@ -706,6 +726,16 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
               {{ profileSaving() ? 'Salvando perfil...' : 'Salvar perfil do aluno' }}
             </button>
           </form>
+          @if (selectedStudent()) {
+            <button
+              type="button"
+              (click)="removeStudent(selectedStudent()!)"
+              [disabled]="removingStudentId() === selectedStudent()!.id"
+              class="btn-danger mt-4 w-full"
+            >
+              {{ removingStudentId() === selectedStudent()!.id ? 'Removendo aluno...' : 'Remover aluno do banco' }}
+            </button>
+          }
         </article>
 
         <section class="chat-panel">
@@ -822,6 +852,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   details = '';
   readonly loading = signal(false);
   readonly profileSaving = signal(false);
+  readonly removingStudentId = signal<number | null>(null);
   readonly avatarUploading = signal(false);
   readonly videoUploading = signal(false);
   readonly lessonSavingId = signal<number | null>(null);
@@ -895,6 +926,40 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
   selectInstructor(instructorId: number): void {
     this.selectedUserId = instructorId;
     this.onStudentChange();
+  }
+
+  selectedStudent(): { id: number; name: string; email: string } | null {
+    if (!this.selectedUserId) return null;
+    const student = this.admin.students().find((item) => item.id === this.selectedUserId);
+    return student ? { id: student.id, name: student.name, email: student.email } : null;
+  }
+
+  async removeStudent(student: { id: number; name: string; email: string }): Promise<void> {
+    const confirmed = window.confirm(
+      `Deseja remover o aluno "${student.name}" (${student.email})?\n\nEsta ação exclui matrículas, pagamentos, mensagens e progresso. Não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+
+    this.removingStudentId.set(student.id);
+    try {
+      await this.admin.deleteStudent(student.id, student.name);
+      if (this.selectedUserId === student.id) {
+        this.selectedUserId = null;
+        this.studentProfile = {
+          name: '',
+          email: '',
+          studentLevel: '',
+          avatarUrl: '',
+          isInstructor: false,
+          password: '',
+        };
+      }
+      this.syncSelectedStudent();
+    } catch {
+      // handled by AdminService
+    } finally {
+      this.removingStudentId.set(null);
+    }
   }
 
   studentInitials(name: string): string {

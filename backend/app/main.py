@@ -1089,6 +1089,34 @@ async def admin_upload_student_avatar(
     return {"image_url": image_url, "user": UserOut.model_validate(student)}
 
 
+@app.delete("/admin/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_student(
+    student_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    student = db.query(User).filter(User.id == student_id, User.is_admin.is_(False)).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+
+    purchase_ids = [
+        row[0] for row in db.query(Purchase.id).filter(Purchase.user_id == student_id).all()
+    ]
+    if purchase_ids:
+        db.query(PaymentEvent).filter(PaymentEvent.purchase_id.in_(purchase_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Purchase).filter(Purchase.user_id == student_id).delete(synchronize_session=False)
+
+    db.query(LessonProgress).filter(LessonProgress.user_id == student_id).delete(synchronize_session=False)
+    db.query(StudentMessage).filter(StudentMessage.user_id == student_id).delete(synchronize_session=False)
+    db.query(Enrollment).filter(Enrollment.user_id == student_id).delete(synchronize_session=False)
+    db.query(Ticket).filter(Ticket.user_id == student_id).delete(synchronize_session=False)
+
+    db.delete(student)
+    db.commit()
+
+
 @app.post("/admin/courses", response_model=CourseOut, status_code=status.HTTP_201_CREATED)
 def admin_create_course(
     payload: CourseCreate,

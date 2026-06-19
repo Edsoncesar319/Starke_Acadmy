@@ -288,6 +288,20 @@ export class AdminService {
     }
   }
 
+  async deleteStudent(studentId: number, studentName: string): Promise<void> {
+    this.error.set(null);
+    try {
+      await firstValueFrom(
+        this.http.delete(`${this.apiUrl}/admin/students/${studentId}`),
+      );
+      this.status.set(`Aluno "${studentName}" removido do banco de dados.`);
+      await this.loadDashboardData();
+    } catch {
+      this.error.set('Falha ao remover aluno.');
+      throw new Error('Falha ao remover aluno.');
+    }
+  }
+
   async loadLessons(courseId: number): Promise<void> {
     const lessons = await firstValueFrom(
       this.http.get<AdminLesson[]>(`${this.apiUrl}/admin/courses/${courseId}/lessons`),
