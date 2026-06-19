@@ -20,7 +20,11 @@ def get_site_public_url() -> str:
 
 
 def _smtp_configured() -> bool:
-    return bool(os.getenv("SMTP_HOST", "").strip())
+    return bool(
+        os.getenv("SMTP_HOST", "").strip()
+        and os.getenv("SMTP_USER", "").strip()
+        and os.getenv("SMTP_PASSWORD", "").strip()
+    )
 
 
 def send_password_reset_email(*, to_email: str, user_name: str, reset_url: str) -> None:

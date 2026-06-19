@@ -457,7 +457,7 @@ export class PortalDataService {
       }
       await this.refreshPortalData();
       await this.refreshPurchases();
-      this.pixStatus.set('Pagamento confirmado! Comprovante enviado no seu chat e painel.');
+      this.pixStatus.set('Pagamento confirmado! Comprovante disponível na Central de Ajuda.');
       return true;
     } catch (err: unknown) {
       const detail = (err as { error?: { detail?: unknown } })?.error?.detail;

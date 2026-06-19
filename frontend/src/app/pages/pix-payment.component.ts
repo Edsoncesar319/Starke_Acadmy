@@ -27,7 +27,7 @@ import { PortalDataService } from '../services/portal-data.service';
       @if (data.pixCheckout(); as pix) {
         <p class="rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-2 text-sm text-slate-200">
           Após pagar o PIX, o <strong class="text-gold-300">administrador</strong> validará o pagamento e liberará suas
-          aulas. Você receberá o comprovante no chat do painel quando a matrícula for confirmada.
+          aulas. Você receberá o comprovante na Central de Ajuda quando a matrícula for confirmada.
         </p>
 
         <div class="rounded-xl border border-gold-500/30 bg-obsidian-700/60 p-5">
@@ -100,8 +100,11 @@ import { PortalDataService } from '../services/portal-data.service';
         } @else {
           <div class="space-y-3">
             <p class="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-4 py-2 text-sm text-emerald-300">
-              Pagamento confirmado. Seu comprovante está no chat do painel e o curso já está liberado.
+              Pagamento confirmado. Seu comprovante está na Central de Ajuda e o curso já está liberado.
             </p>
+            <a routerLink="/support" [queryParams]="{ chat: '1' }" class="btn-outline w-full text-center sm:w-auto">
+              Abrir Central de Ajuda
+            </a>
             <button
               type="button"
               (click)="printReceipt()"

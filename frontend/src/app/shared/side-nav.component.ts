@@ -89,7 +89,7 @@ interface NavItem {
                 <span class="truncate">{{ item.label }}</span>
               }
             </span>
-            @if ((!layout.collapsed() || !layout.isDesktop()) && item.path === '/dashboard' && data.unreadMessagesCount() > 0) {
+            @if ((!layout.collapsed() || !layout.isDesktop()) && item.path === '/support' && data.unreadMessagesCount() > 0) {
               <span
                 class="min-w-5 shrink-0 rounded-full bg-gold-500 px-2 py-0.5 text-center text-xs font-semibold text-obsidian-900"
                 [attr.aria-label]="data.unreadMessagesCount() + ' novas mensagens'"
@@ -97,7 +97,7 @@ interface NavItem {
                 {{ data.unreadMessagesCount() }}
               </span>
             }
-            @if (layout.collapsed() && layout.isDesktop() && item.path === '/dashboard' && data.unreadMessagesCount() > 0) {
+            @if (layout.collapsed() && layout.isDesktop() && item.path === '/support' && data.unreadMessagesCount() > 0) {
               <span
                 class="absolute right-1 top-1 h-2 w-2 rounded-full bg-gold-500"
                 [attr.aria-label]="data.unreadMessagesCount() + ' novas mensagens'"
