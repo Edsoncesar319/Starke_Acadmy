@@ -659,6 +659,14 @@ import { LessonQuizDraftService } from '../services/lesson-quiz-draft.service';
               placeholder="Nível (ex: Aluno Platina)"
               class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
             />
+            <input
+              [(ngModel)]="studentProfile.password"
+              name="studentProfilePassword"
+              type="password"
+              placeholder="Nova senha (opcional, mín. 6 caracteres)"
+              autocomplete="new-password"
+              class="w-full rounded-lg border border-gold-500/20 bg-obsidian-800 px-3 py-2 text-sm"
+            />
             <div class="flex flex-wrap items-center gap-3">
               @if (studentProfile.avatarUrl) {
                 <img
@@ -834,6 +842,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
     studentLevel: '',
     avatarUrl: '',
     isInstructor: false,
+    password: '',
   };
 
   async ngOnInit(): Promise<void> {
@@ -906,6 +915,7 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
       studentLevel: user.student_level,
       avatarUrl: user.avatar_url ?? '',
       isInstructor: user.is_instructor ?? false,
+      password: '',
     };
   }
 
@@ -922,6 +932,11 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
       this.admin.error.set('Selecione um aluno para editar o perfil.');
       return;
     }
+    const password = this.studentProfile.password.trim();
+    if (password && password.length < 6) {
+      this.admin.error.set('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
     this.profileSaving.set(true);
     try {
       await this.admin.updateStudent(this.selectedUserId, {
@@ -930,7 +945,9 @@ export class SuperAdminDashboardComponent implements OnInit, OnDestroy {
         studentLevel: this.studentProfile.studentLevel,
         avatarUrl: this.studentProfile.avatarUrl || null,
         isInstructor: this.studentProfile.isInstructor,
+        password: password || null,
       });
+      this.studentProfile.password = '';
       this.onStudentChange();
     } catch {
       // handled by AdminService

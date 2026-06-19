@@ -260,20 +260,27 @@ export class AdminService {
       studentLevel: string;
       avatarUrl: string | null;
       isInstructor: boolean;
+      password?: string | null;
     },
   ): Promise<void> {
     this.error.set(null);
     try {
+      const body: Record<string, unknown> = {
+        name: payload.name.trim(),
+        email: payload.email.trim(),
+        student_level: payload.studentLevel.trim(),
+        avatar_url: payload.avatarUrl,
+        is_instructor: payload.isInstructor,
+      };
+      if (payload.password?.trim()) {
+        body['password'] = payload.password.trim();
+      }
       await firstValueFrom(
-        this.http.patch(`${this.apiUrl}/admin/students/${studentId}`, {
-          name: payload.name.trim(),
-          email: payload.email.trim(),
-          student_level: payload.studentLevel.trim(),
-          avatar_url: payload.avatarUrl,
-          is_instructor: payload.isInstructor,
-        }),
+        this.http.patch(`${this.apiUrl}/admin/students/${studentId}`, body),
       );
-      this.status.set(`Perfil do aluno "${payload.name}" atualizado.`);
+      this.status.set(
+        `Perfil do aluno "${payload.name}" atualizado.${payload.password?.trim() ? ' Senha alterada.' : ''}`,
+      );
       await this.loadDashboardData();
     } catch {
       this.error.set('Falha ao atualizar perfil do aluno.');

@@ -57,6 +57,7 @@ class AdminStudentUpdate(BaseModel):
     student_level: str
     avatar_url: str | None = None
     is_instructor: bool = False
+    password: str | None = None
 
 
 class CourseOut(BaseModel):

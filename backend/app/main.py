@@ -1054,6 +1054,13 @@ def admin_update_student(
     if existing:
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
+    from .auth import get_password_hash
+
+    if payload.password is not None and payload.password.strip():
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 6 caracteres")
+        student.password_hash = get_password_hash(payload.password)
+
     student.name = payload.name.strip()
     student.email = payload.email
     student.student_level = payload.student_level.strip()
