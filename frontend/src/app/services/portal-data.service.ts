@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES, prepareImageForUpload } from '../utils/image-upload.util';
-import { printPaymentReceipt, purchaseToReceiptData } from '../utils/payment-receipt.util';
+import { printPaymentReceipt, purchaseToReceiptData, receiptDataFromMessage } from '../utils/payment-receipt.util';
 
 export interface Course {
   id: number;
@@ -479,18 +479,38 @@ export class PortalDataService {
     }
   }
 
-  printPurchaseReceipt(purchase: Purchase, courseTitle: string): boolean {
+  async printPurchaseReceipt(purchase: Purchase, courseTitle: string): Promise<boolean> {
     if (purchase.status !== 'paid') {
       this.error.set('Só é possível imprimir comprovante de compras pagas.');
       return false;
     }
     const receipt = purchaseToReceiptData(purchase, this.student(), courseTitle);
-    const opened = printPaymentReceipt(receipt);
+    const opened = await printPaymentReceipt(receipt);
     if (!opened) {
-      this.error.set('Permita pop-ups neste site para imprimir o comprovante.');
+      this.error.set('Não foi possível abrir a impressão. Tente permitir pop-ups ou use outro navegador.');
       return false;
     }
     this.error.set(null);
+    this.status.set('Comprovante aberto para impressão.');
+    return true;
+  }
+
+  async printReceiptFromMessageData(
+    message: { subject: string; details: string; courseId: number | null },
+    courseTitle: string,
+  ): Promise<boolean> {
+    const receipt = receiptDataFromMessage(message, this.student(), courseTitle);
+    if (!receipt) {
+      this.error.set('Não foi possível montar o comprovante desta mensagem.');
+      return false;
+    }
+    const opened = await printPaymentReceipt(receipt);
+    if (!opened) {
+      this.error.set('Não foi possível abrir a impressão. Tente permitir pop-ups ou use outro navegador.');
+      return false;
+    }
+    this.error.set(null);
+    this.status.set('Comprovante aberto para impressão.');
     return true;
   }
 

@@ -56,7 +56,7 @@ npm start
 | Perfil | Email | Senha |
 |--------|-------|-------|
 | Aluno | `evelyn@starke.academy` | `elite123` |
-| Admin | `admin@starke.academy` | `admin123` |
+| Admin | `admin@starke.academy` | *(definida no deploy / seed)* |
 
 ## Build
 

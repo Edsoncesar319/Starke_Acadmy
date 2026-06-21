@@ -54,16 +54,6 @@ interface NavItem {
           >
             <mat-icon class="material-symbols-rounded">close</mat-icon>
           </button>
-        } @else if (!layout.collapsed()) {
-          <button
-            type="button"
-            (click)="layout.toggle()"
-            class="hidden rounded-lg border border-gold-500/25 p-2 text-gold-300 transition hover:bg-gold-500/10 lg:inline-flex"
-            title="Recolher menu"
-            aria-label="Recolher menu lateral"
-          >
-            <mat-icon class="material-symbols-rounded">chevron_left</mat-icon>
-          </button>
         }
       </div>
 
@@ -149,27 +139,6 @@ interface NavItem {
             </div>
           }
         </div>
-      }
-
-      @if (layout.isDesktop()) {
-        <button
-          type="button"
-          (click)="layout.toggle()"
-          class="mt-4 flex w-full shrink-0 items-center rounded-lg border border-gold-500/25 text-gold-300 transition hover:bg-gold-500/10"
-          [ngClass]="layout.collapsed() ? 'justify-center p-2.5' : 'gap-2 px-3 py-2.5 text-xs'"
-          [attr.aria-label]="layout.collapsed() ? 'Expandir menu' : 'Recolher menu'"
-          [title]="layout.collapsed() ? 'Expandir menu' : 'Recolher menu'"
-        >
-          <mat-icon
-            class="material-symbols-rounded shrink-0 transition-transform duration-300"
-            [class.rotate-180]="layout.collapsed()"
-          >
-            chevron_left
-          </mat-icon>
-          @if (!layout.collapsed()) {
-            <span>Recolher menu</span>
-          }
-        </button>
       }
     </aside>
   `,

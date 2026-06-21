@@ -170,6 +170,39 @@ async def ensure_utf8_json(request, call_next):
 _startup_done = False
 
 
+def _bootstrap_admin_password(db: Session) -> bool:
+    """Atualiza senha do admin quando ADMIN_PASSWORD_BOOTSTRAP estiver definida (uso único)."""
+    bootstrap = os.getenv("ADMIN_PASSWORD_BOOTSTRAP", "").strip()
+    if not bootstrap:
+        return False
+
+    from .auth import get_password_hash, verify_password
+
+    admin = db.query(User).filter(User.email == "admin@starke.academy").first()
+    if not admin:
+        admin = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+
+    if not admin:
+        admin = User(
+            name="Super Admin",
+            email="admin@starke.academy",
+            student_level="Administrador",
+            avatar_url="https://example.com/admin-avatar.jpg",
+            is_admin=True,
+        )
+        db.add(admin)
+
+    admin.email = "admin@starke.academy"
+    admin.password_hash = get_password_hash(bootstrap)
+    admin.is_admin = True
+    db.commit()
+    db.refresh(admin)
+
+    if not verify_password(bootstrap, admin.password_hash):
+        raise HTTPException(status_code=500, detail="Falha ao validar nova senha do admin")
+    return True
+
+
 def _run_startup() -> None:
     global _startup_done
     if _startup_done:
@@ -180,6 +213,7 @@ def _run_startup() -> None:
     db = SessionLocal()
     try:
         seed_data(db)
+        _bootstrap_admin_password(db)
         seed_quizzes_for_existing_lessons(db)
     finally:
         db.close()

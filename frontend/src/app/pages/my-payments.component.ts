@@ -208,10 +208,8 @@ export class MyPaymentsComponent implements OnInit {
     return this.data.courses().find((c) => c.id === courseId)?.title ?? `Curso #${courseId}`;
   }
 
-  printReceipt(purchase: { id: number; course_id: number; status: string }): void {
-    const full = this.data.purchases().find((p) => p.id === purchase.id);
-    if (!full) return;
-    this.data.printPurchaseReceipt(full, this.courseTitle(purchase.course_id));
+  printReceipt(purchase: Purchase): void {
+    void this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
   }
 
   async removePurchase(purchase: { id: number; course_id: number; status: string }): Promise<void> {

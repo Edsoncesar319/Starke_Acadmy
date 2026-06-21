@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 
+import os
+
 from .auth import get_password_hash
 from .models import Course, Lesson, User
 
@@ -10,7 +12,9 @@ def seed_data(db: Session) -> None:
         admin = User(
             name="Super Admin",
             email="admin@starke.academy",
-            password_hash=get_password_hash("admin123"),
+            password_hash=get_password_hash(
+                os.getenv("ADMIN_INITIAL_PASSWORD", "admin123")
+            ),
             student_level="Administrador",
             avatar_url="https://example.com/admin-avatar.jpg",
             is_admin=True,

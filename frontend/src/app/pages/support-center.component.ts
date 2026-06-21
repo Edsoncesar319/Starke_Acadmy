@@ -197,6 +197,7 @@ export class SupportCenterComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     void this.data.refreshMessages();
+    void this.data.refreshPurchases();
 
     if (this.route.snapshot.queryParamMap.get('chat') === '1') {
       this.openChat();
@@ -255,24 +256,31 @@ export class SupportCenterComponent implements OnInit, OnDestroy {
     await this.data.refreshMessages();
   }
 
-  printReceiptFromMessage(message: { subject: string; courseId: number | null }): void {
+  async printReceiptFromMessage(message: {
+    subject: string;
+    details: string;
+    courseId: number | null;
+  }): Promise<void> {
     const purchaseId = findPurchaseIdFromReceiptSubject(message.subject);
     if (!purchaseId) {
       this.data.error.set('Não foi possível identificar a compra deste comprovante.');
       return;
     }
+
+    await this.data.refreshPurchases();
     const purchase = this.data.purchases().find((p) => p.id === purchaseId);
-    if (!purchase || purchase.status !== 'paid') {
-      this.data.error.set('Comprovante indisponível para impressão. Atualize a página de pagamentos.');
-      void this.data.refreshPurchases().then(() => {
-        const refreshed = this.data.purchases().find((p) => p.id === purchaseId);
-        if (refreshed?.status === 'paid') {
-          this.data.printPurchaseReceipt(refreshed, this.courseTitle(refreshed.course_id));
-        }
-      });
+    const courseTitle = this.courseTitle(message.courseId ?? purchase?.course_id ?? null);
+
+    if (purchase?.status === 'paid') {
+      await this.data.printPurchaseReceipt(purchase, courseTitle);
       return;
     }
-    this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
+
+    if (await this.data.printReceiptFromMessageData(message, courseTitle)) {
+      return;
+    }
+
+    this.data.error.set('Comprovante indisponível. Aguarde a confirmação do pagamento pelo administrador.');
   }
 
   courseTitle(courseId: number | null): string {

@@ -211,7 +211,7 @@ export class ProfileComponent implements OnInit {
   }
 
   printReceipt(purchase: Purchase): void {
-    this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
+    void this.data.printPurchaseReceipt(purchase, this.courseTitle(purchase.course_id));
   }
 
   async removePurchase(purchase: Purchase): Promise<void> {

@@ -185,11 +185,11 @@ export class PixPaymentComponent implements OnInit, OnDestroy {
     const courseTitle = this.courseTitle(checkout.purchase.course_id);
     const purchase = this.data.purchases().find((p) => p.id === checkout.purchase.id);
     if (purchase) {
-      this.data.printPurchaseReceipt(purchase, courseTitle);
+      void this.data.printPurchaseReceipt(purchase, courseTitle);
       return;
     }
     const course = this.data.courses().find((c) => c.id === checkout.purchase.course_id);
-    this.data.printPurchaseReceipt(
+    void this.data.printPurchaseReceipt(
       {
         id: checkout.purchase.id,
         user_id: 0,
